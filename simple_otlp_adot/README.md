@@ -1,8 +1,6 @@
 # Basic OTLP exporter Example
 
-## Steps
-
-### Setup and run ADOT:
+## 1. Setup and run ADOT:
 - Follow these steps https://aws-otel.github.io/docs/setup/ec2
 - Run ```sudo /opt/aws/aws-otel-collector/bin/aws-otel-collector-ctl -a status``` and confirm it is running:
 ```
@@ -13,7 +11,7 @@
 }
 ```
   
-### Setup and run OTLP example:
+## 2. Setup and run OTLP example:
 -
   ```
      cd ~
@@ -23,7 +21,7 @@
      cargo run
   ```
 
-## View result
+## 3. View result
 `CloudWatch -> Metrics` will have a new entry in `All -> basic-otlp-metrics-example` which can be used to view metric in graphs.
 and
 CLoudwatch `CloudWatch -> Log groups -> /metrics/basic-otlp-metrics-example` will show metrics as below:
