@@ -2,121 +2,346 @@
 
 This example shows basic span and metric usage, and exports to the [OpenTelemetry Collector](https://github.com/open-telemetry/opentelemetry-collector) via OTLP.
 
-## Usage
+## Steps
 
-### `docker-compose`
-
-By default runs against the `otel/opentelemetry-collector-dev:latest` image, and uses the `tonic`'s
-`grpc` example as the transport.
-
-```shell
-docker-compose up
-or
-docker-compose up -d
+### Setup and run ADOT:
+- Follow these steps https://aws-otel.github.io/docs/setup/ec2
+- Run ```sudo /opt/aws/aws-otel-collector/bin/aws-otel-collector-ctl -a status``` and confirm it is running:
 ```
-
-In another terminal run the application `cargo run`
-
-Use the browser to see the trace:
-- Jaeger at http://0.0.0.0:16686
-
-Tear it down:
-
-```shell
-docker-compose down
+{
+  "status": "running",
+  "starttime": "2023-08-21T14:54:29+0000",
+  "version": "v0.32.0"
+}
 ```
+  
+### Setup and run OTLP example:
+-
+  ```
+     cd ~
+     git clone https://github.com/open-telemetry/opentelemetry-rust.git
+     git clone https://github.com/sudanl0/test/
+     cd test/simple_otlp_adot/
+     cargo run
+  ```
 
-### Manual
+## View result
+`CloudWatch -> Metrics` will have a new entry in `All -> basic-otlp-metrics-example` which can be used to view metric in graphs.
+and
+CLoudwatch `CloudWatch -> Log groups -> /metrics/basic-otlp-metrics-example` will show metrics as below:
 
-If you don't want to use `docker-compose`, you can manually run the `otel/opentelemetry-collector` container
-and inspect the logs to see traces being transferred.
-
-```shell
-# From the current directory, run `opentelemetry-collector`
-$ docker run --rm -it -p 4317:4317 -p 4318:4318 -v $(pwd):/cfg otel/opentelemetry-collector:latest --config=/cfg/otel-collector-config.yaml
-
-# Report spans/metrics
-$ cargo run
-```
-
-# View result
-
-You should be able to see something similar below with different time and ID in the same console that docker runs.
-
-## Span
 
 ```
-Resource labels:
-     -> service.name: STRING(trace-demo)
-InstrumentationLibrarySpans #0
-InstrumentationLibrary
-Span #0
-    Trace ID       : 737d9c966e8250475f400776228c0044
-    Parent ID      : ade62a071825f2db
-    ID             : 7aa9ea5f24e0444c
-    Name           : Sub operation...
-    Kind           : SPAN_KIND_INTERNAL
-    Start time     : 2022-02-24 04:59:57.218995 +0000 UTC
-    End time       : 2022-02-24 04:59:57.219022 +0000 UTC
-    Status code    : STATUS_CODE_UNSET
-    Status message :
-Attributes:
-     -> lemons: STRING(five)
-Events:
-SpanEvent #0
-     -> Name: Sub span event
-     -> Timestamp: 2022-02-24 04:59:57.219012 +0000 UTC
-     -> DroppedAttributesCount: 0
-ResourceSpans #1
-Resource labels:
-     -> service.name: STRING(trace-demo)
-InstrumentationLibrarySpans #0
-InstrumentationLibrary
-Span #0
-    Trace ID       : 737d9c966e8250475f400776228c0044
-    Parent ID      :
-    ID             : ade62a071825f2db
-    Name           : operation
-    Kind           : SPAN_KIND_INTERNAL
-    Start time     : 2022-02-24 04:59:57.218877 +0000 UTC
-    End time       : 2022-02-24 04:59:57.219043 +0000 UTC
-    Status code    : STATUS_CODE_UNSET
-    Status message :
-Attributes:
-     -> ex.com/another: STRING(yes)
-Events:
-SpanEvent #0
-     -> Name: Nice operation!
-     -> Timestamp: 2022-02-24 04:59:57.218896 +0000 UTC
-     -> DroppedAttributesCount: 0
-     -> Attributes:
-         -> bogons: INT(100)
+{
+    "NetDeviceMetrics": 0,
+    "OTelLib": "fc-meter",
+    "Version": "1",
+    "_aws": {
+        "CloudWatchMetrics": [
+            {
+                "Namespace": "basic-otlp-metrics-example",
+                "Dimensions": [
+                    [
+                        "dev1",
+                        "total",
+                        "OTelLib"
+                    ],
+                    [
+                        "OTelLib"
+                    ],
+                    [
+                        "OTelLib",
+                        "dev1"
+                    ],
+                    [
+                        "OTelLib",
+                        "total"
+                    ]
+                ],
+                "Metrics": [
+                    {
+                        "Name": "NetDeviceMetrics",
+                        "Unit": "Bytes"
+                    },
+                    {
+                        "Name": "vsock",
+                        "Unit": "Bytes"
+                    }
+                ]
+            }
+        ],
+        "Timestamp": 1692631168928
+    },
+    "dev1": "rx_bytes_count",
+    "total": "rx_bytes_count",
+    "vsock": 0
+}
+{
+    "NetDeviceMetrics": 0,
+    "OTelLib": "fc-meter",
+    "Version": "1",
+    "_aws": {
+        "CloudWatchMetrics": [
+            {
+                "Namespace": "basic-otlp-metrics-example",
+                "Dimensions": [
+                    [
+                        "OTelLib"
+                    ],
+                    [
+                        "OTelLib",
+                        "dev1"
+                    ]
+                ],
+                "Metrics": [
+                    {
+                        "Name": "NetDeviceMetrics",
+                        "Unit": "Bytes"
+                    },
+                    {
+                        "Name": "vsock",
+                        "Unit": "Bytes"
+                    }
+                ]
+            }
+        ],
+        "Timestamp": 1692631168928
+    },
+    "dev1": "tx_bytes_count",
+    "vsock": 0
+}
+{
+    "NetDeviceMetrics": 0,
+    "OTelLib": "fc-meter",
+    "Version": "1",
+    "_aws": {
+        "CloudWatchMetrics": [
+            {
+                "Namespace": "basic-otlp-metrics-example",
+                "Dimensions": [
+                    [
+                        "OTelLib"
+                    ],
+                    [
+                        "OTelLib",
+                        "dev0"
+                    ]
+                ],
+                "Metrics": [
+                    {
+                        "Name": "NetDeviceMetrics",
+                        "Unit": "Bytes"
+                    },
+                    {
+                        "Name": "vsock",
+                        "Unit": "Bytes"
+                    }
+                ]
+            }
+        ],
+        "Timestamp": 1692631168928
+    },
+    "dev0": "tx_bytes_count",
+    "vsock": 0
+}
+{
+    "NetDeviceMetrics": 0,
+    "OTelLib": "fc-meter",
+    "Version": "1",
+    "_aws": {
+        "CloudWatchMetrics": [
+            {
+                "Namespace": "basic-otlp-metrics-example",
+                "Dimensions": [
+                    [
+                        "dev0",
+                        "total",
+                        "OTelLib"
+                    ],
+                    [
+                        "OTelLib"
+                    ],
+                    [
+                        "OTelLib",
+                        "dev0"
+                    ],
+                    [
+                        "OTelLib",
+                        "total"
+                    ]
+                ],
+                "Metrics": [
+                    {
+                        "Name": "NetDeviceMetrics",
+                        "Unit": "Bytes"
+                    },
+                    {
+                        "Name": "vsock",
+                        "Unit": "Bytes"
+                    }
+                ]
+            }
+        ],
+        "Timestamp": 1692631168928
+    },
+    "dev0": "rx_bytes_count",
+    "total": "rx_bytes_count",
+    "vsock": 0
+}
+{
+    "NetDeviceMetrics": 0,
+    "OTelLib": "fc-meter",
+    "Version": "1",
+    "_aws": {
+        "CloudWatchMetrics": [
+            {
+                "Namespace": "basic-otlp-metrics-example",
+                "Dimensions": [
+                    [
+                        "dev1",
+                        "total",
+                        "OTelLib"
+                    ],
+                    [
+                        "OTelLib"
+                    ],
+                    [
+                        "OTelLib",
+                        "dev1"
+                    ],
+                    [
+                        "OTelLib",
+                        "total"
+                    ]
+                ],
+                "Metrics": [
+                    {
+                        "Name": "NetDeviceMetrics",
+                        "Unit": "Bytes"
+                    },
+                    {
+                        "Name": "vsock",
+                        "Unit": "Bytes"
+                    }
+                ]
+            }
+        ],
+        "Timestamp": 1692631169175
+    },
+    "dev1": "rx_bytes_count",
+    "total": "rx_bytes_count",
+    "vsock": 0
+}
+{
+    "NetDeviceMetrics": 0,
+    "OTelLib": "fc-meter",
+    "Version": "1",
+    "_aws": {
+        "CloudWatchMetrics": [
+            {
+                "Namespace": "basic-otlp-metrics-example",
+                "Dimensions": [
+                    [
+                        "OTelLib"
+                    ],
+                    [
+                        "OTelLib",
+                        "dev1"
+                    ]
+                ],
+                "Metrics": [
+                    {
+                        "Name": "NetDeviceMetrics",
+                        "Unit": "Bytes"
+                    },
+                    {
+                        "Name": "vsock",
+                        "Unit": "Bytes"
+                    }
+                ]
+            }
+        ],
+        "Timestamp": 1692631169175
+    },
+    "dev1": "tx_bytes_count",
+    "vsock": 0
+}
+{
+    "NetDeviceMetrics": 0,
+    "OTelLib": "fc-meter",
+    "Version": "1",
+    "_aws": {
+        "CloudWatchMetrics": [
+            {
+                "Namespace": "basic-otlp-metrics-example",
+                "Dimensions": [
+                    [
+                        "OTelLib"
+                    ],
+                    [
+                        "OTelLib",
+                        "dev0"
+                    ]
+                ],
+                "Metrics": [
+                    {
+                        "Name": "NetDeviceMetrics",
+                        "Unit": "Bytes"
+                    },
+                    {
+                        "Name": "vsock",
+                        "Unit": "Bytes"
+                    }
+                ]
+            }
+        ],
+        "Timestamp": 1692631169175
+    },
+    "dev0": "tx_bytes_count",
+    "vsock": 0
+}
+{
+    "NetDeviceMetrics": 0,
+    "OTelLib": "fc-meter",
+    "Version": "1",
+    "_aws": {
+        "CloudWatchMetrics": [
+            {
+                "Namespace": "basic-otlp-metrics-example",
+                "Dimensions": [
+                    [
+                        "OTelLib",
+                        "dev0",
+                        "total"
+                    ],
+                    [
+                        "OTelLib"
+                    ],
+                    [
+                        "OTelLib",
+                        "dev0"
+                    ],
+                    [
+                        "OTelLib",
+                        "total"
+                    ]
+                ],
+                "Metrics": [
+                    {
+                        "Name": "vsock",
+                        "Unit": "Bytes"
+                    },
+                    {
+                        "Name": "NetDeviceMetrics",
+                        "Unit": "Bytes"
+                    }
+                ]
+            }
+        ],
+        "Timestamp": 1692631169175
+    },
+    "dev0": "rx_bytes_count",
+    "total": "rx_bytes_count",
+    "vsock": 0
+}
 ```
-
-## Metric
-
-```
-2021-11-19T04:08:36.453Z	INFO	loggingexporter/logging_exporter.go:56	MetricsExporter	{"#metrics": 1}
-2021-11-19T04:08:36.454Z	DEBUG	loggingexporter/logging_exporter.go:66	ResourceMetrics #0
-Resource labels:
-     -> service.name: STRING(unknown_service)
-InstrumentationLibraryMetrics #0
-InstrumentationLibrary ex.com/basic
-Metric #0
-Descriptor:
-     -> Name: ex.com.one
-     -> Description: A ValueObserver set to 1.0
-     -> Unit:
-     -> DataType: Gauge
-NumberDataPoints #0
-Data point attributes:
-     -> A: STRING(1)
-     -> B: STRING(2)
-     -> C: STRING(3)
-     -> lemons: INT(10)
-StartTimestamp: 2021-11-19 04:07:46.29555 +0000 UTC
-Timestamp: 2021-11-19 04:08:36.297279 +0000 UTC
-Value: 1.000000
-```
-
-
