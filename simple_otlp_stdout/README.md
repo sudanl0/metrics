@@ -9,8 +9,145 @@ the stdout.
 Run the following, and the Metrics will be written out to stdout.
 
 ```shell
-$ cargo run
+cargo run | jq '.'
 ```
 
+```
+{
+  "resourceMetrics": {
+    "resource": {
+      "attributes": [
+        {
+          "key": "service.name",
+          "value": {
+            "stringValue": "metrics-basic-example"
+          }
+        }
+      ]
+    },
+    "scopeMetrics": [
+      {
+        "scope": {
+          "name": "fc_meter"
+        },
+        "metrics": [
+          {
+            "name": "NetDeviceMetrics",
+            "unit": "Bytes",
+            "sum": {
+              "dataPoints": [
+                {
+                  "attributes": {
+                    "dev1": {
+                      "stringValue": "tx_bytes_count"
+                    }
+                  },
+                  "startTimeUnixNano": 1692627650132829000,
+                  "timeUnixNano": 1692627650133050000,
+                  "value": 9
+                },
+                {
+                  "attributes": {
+                    "dev0": {
+                      "stringValue": "tx_bytes_count"
+                    }
+                  },
+                  "startTimeUnixNano": 1692627650132829000,
+                  "timeUnixNano": 1692627650133050000,
+                  "value": 101
+                },
+                {
+                  "attributes": {
+                    "dev0": {
+                      "stringValue": "rx_bytes_count"
+                    },
+                    "total": {
+                      "stringValue": "rx_bytes_count"
+                    }
+                  },
+                  "startTimeUnixNano": 1692627650132829000,
+                  "timeUnixNano": 1692627650133050000,
+                  "value": 100
+                },
+                {
+                  "attributes": {
+                    "dev1": {
+                      "stringValue": "rx_bytes_count"
+                    },
+                    "total": {
+                      "stringValue": "rx_bytes_count"
+                    }
+                  },
+                  "startTimeUnixNano": 1692627650132829000,
+                  "timeUnixNano": 1692627650133050000,
+                  "value": 8
+                }
+              ],
+              "aggregationTemporality": 2,
+              "isMonotonic": true
+            }
+          },
+          {
+            "name": "vsock",
+            "unit": "Bytes",
+            "sum": {
+              "dataPoints": [
+                {
+                  "attributes": {
+                    "dev0": {
+                      "stringValue": "rx_bytes_count"
+                    },
+                    "total": {
+                      "stringValue": "rx_bytes_count"
+                    }
+                  },
+                  "startTimeUnixNano": 1692627650132939000,
+                  "timeUnixNano": 1692627650133055000,
+                  "value": 4
+                },
+                {
+                  "attributes": {
+                    "dev1": {
+                      "stringValue": "rx_bytes_count"
+                    },
+                    "total": {
+                      "stringValue": "rx_bytes_count"
+                    }
+                  },
+                  "startTimeUnixNano": 1692627650132939000,
+                  "timeUnixNano": 1692627650133055000,
+                  "value": 8
+                },
+                {
+                  "attributes": {
+                    "dev1": {
+                      "stringValue": "tx_bytes_count"
+                    }
+                  },
+                  "startTimeUnixNano": 1692627650132939000,
+                  "timeUnixNano": 1692627650133055000,
+                  "value": 9
+                },
+                {
+                  "attributes": {
+                    "dev0": {
+                      "stringValue": "tx_bytes_count"
+                    }
+                  },
+                  "startTimeUnixNano": 1692627650132939000,
+                  "timeUnixNano": 1692627650133055000,
+                  "value": 5
+                }
+              ],
+              "aggregationTemporality": 2,
+              "isMonotonic": true
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 
 
