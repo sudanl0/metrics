@@ -1,7 +1,7 @@
 # Basic OTLP exporter Example
 
 ## 1. Setup and run ADOT:
-- Follow these steps https://aws-otel.github.io/docs/setup/ec2
+- Follow these steps https://aws-otel.github.io/docs/setup/ec2 and setup ADOT on a metal instance.
 - Run ```sudo /opt/aws/aws-otel-collector/bin/aws-otel-collector-ctl -a status``` and confirm it is running:
 ```
 {
