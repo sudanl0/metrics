@@ -1,3 +1,101 @@
 # Example for using metrics_cloudwatch_embedded
 
  - metric_cloudwatch_result.json : result of `cargo run | jq '.'`
+```
+{
+  "_aws": {
+    "Timestamp": 1692565958197,
+    "CloudWatchMetrics": [
+      {
+        "Namespace": "MyApplication",
+        "Dimensions": [
+          [
+            "Firecracker"
+          ]
+        ],
+        "Metrics": [
+          {
+            "Name": "vsock_0::rx_bytes_count",
+            "Unit": "Bytes"
+          }
+        ]
+      }
+    ]
+  },
+  "Firecracker": "block",
+  "RequestId": "ABC123",
+  "vsock_0::rx_bytes_count": 100
+}
+{
+  "_aws": {
+    "Timestamp": 1692565958197,
+    "CloudWatchMetrics": [
+      {
+        "Namespace": "MyApplication",
+        "Dimensions": [
+          [
+            "Firecracker"
+          ]
+        ],
+        "Metrics": [
+          {
+            "Name": "NetDeviceMetrics_0::rx_bytes_count",
+            "Unit": "Bytes"
+          }
+        ]
+      }
+    ]
+  },
+  "Firecracker": "net",
+  "RequestId": "ABC123",
+  "NetDeviceMetrics_0::rx_bytes_count": 100
+}
+{
+  "_aws": {
+    "Timestamp": 1692565958197,
+    "CloudWatchMetrics": [
+      {
+        "Namespace": "MyApplication",
+        "Dimensions": [
+          [
+            "Firecracker"
+          ]
+        ],
+        "Metrics": [
+          {
+            "Name": "vsock_0::rx_bytes_count",
+            "Unit": "Bytes"
+          }
+        ]
+      }
+    ]
+  },
+  "Firecracker": "block",
+  "RequestId": "ABC123",
+  "vsock_0::rx_bytes_count": 150
+}
+{
+  "_aws": {
+    "Timestamp": 1692565958197,
+    "CloudWatchMetrics": [
+      {
+        "Namespace": "MyApplication",
+        "Dimensions": [
+          [
+            "Firecracker"
+          ]
+        ],
+        "Metrics": [
+          {
+            "Name": "NetDeviceMetrics_0::rx_bytes_count",
+            "Unit": "Bytes"
+          }
+        ]
+      }
+    ]
+  },
+  "Firecracker": "net",
+  "RequestId": "ABC123",
+  "NetDeviceMetrics_0::rx_bytes_count": 250
+}
+```
