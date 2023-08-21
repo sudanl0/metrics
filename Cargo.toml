@@ -1,0 +1,8 @@
+[package]
+name = "simple_emf"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+metrics = "0.21.1"
+metrics_cloudwatch_embedded = { version = "0.4.2"}
