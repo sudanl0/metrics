@@ -1,4 +1,4 @@
-use crate::metrics::SharedIncMetric;
+use crate::metrics::{METRICS, SharedIncMetric,IncMetric};
 use serde::{Serialize, ser::SerializeMap};
 
 /// Network-related metrics.
@@ -16,6 +16,22 @@ impl NetPerDeviceMetrics {
             activate_fails: SharedIncMetric::new(),
             rx_bytes_count: SharedIncMetric::new(),
         }
+    }
+}
+
+pub trait NetDeviceMetricsFns {
+    fn activate_fails_add(&self, n: usize);
+    fn rx_bytes_count_add(&self, n: usize);
+}
+
+impl NetDeviceMetricsFns for NetPerDeviceMetrics {
+    fn activate_fails_add(&self, n: usize) {
+        self.activate_fails.add(n);
+        METRICS.net.activate_fails.add(n);
+    }
+    fn rx_bytes_count_add(&self, n: usize) {
+        self.rx_bytes_count.add(n);
+        METRICS.net.rx_bytes_count.add(n);
     }
 }
 
