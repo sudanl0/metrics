@@ -1,2 +1,2 @@
-# Metrics exmaples
+# Collection of Metrics samples and prototypes
 
