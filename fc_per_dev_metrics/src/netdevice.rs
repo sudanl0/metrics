@@ -1,11 +1,12 @@
 use crate::metrics::{METRICS, SharedIncMetric,IncMetric};
 use serde::{Serialize, ser::SerializeMap};
+use paste::paste;
 
 /// Network-related metrics.
 #[derive(Debug, Default, Serialize)]
 pub struct NetPerDeviceMetrics {
     /// Number of times when activate failed on a network device.
-    pub activate_fails: SharedIncMetric,
+    activate_fails: SharedIncMetric,
     /// Number of times when interacting with the space config of a network device failed.
     pub cfg_fails: SharedIncMetric,
     //// Number of times the mac address was updated through the config space.
@@ -96,18 +97,73 @@ impl NetPerDeviceMetrics {
 
 pub trait NetDeviceMetricsFns {
     fn activate_fails_add(&self, n: usize);
+    fn cfg_fails_add(&self, n: usize);
+    fn mac_address_updates_add(&self, n: usize);
+    fn no_rx_avail_buffer_add(&self, n: usize);
+    fn no_tx_avail_buffer_add(&self, n: usize);
+    fn event_fails_add(&self, n: usize);
+    fn rx_queue_event_count_add(&self, n: usize);
+    fn rx_event_rate_limiter_count_add(&self, n: usize);
+    fn rx_partial_writes_add(&self, n: usize);
+    fn rx_rate_limiter_throttled_add(&self, n: usize);
+    fn rx_tap_event_count_add(&self, n: usize);
     fn rx_bytes_count_add(&self, n: usize);
+    fn rx_packets_count_add(&self, n: usize);
+    fn rx_fails_add(&self, n: usize);
+    fn rx_count_add(&self, n: usize);
+    fn tap_read_fails_add(&self, n: usize);
+    fn tap_write_fails_add(&self, n: usize);
+    fn tx_bytes_count_add(&self, n: usize);
+    fn tx_malformed_frames_add(&self, n: usize);
+    fn tx_fails_add(&self, n: usize);
+    fn tx_count_add(&self, n: usize);
+    fn tx_packets_count_add(&self, n: usize);
+    fn tx_partial_reads_add(&self, n: usize);
+    fn tx_queue_event_count_add(&self, n: usize);
+    fn tx_rate_limiter_event_count_add(&self, n: usize);
+    fn tx_rate_limiter_throttled_add(&self, n: usize);
+    fn tx_spoofed_mac_count_add(&self, n: usize);
 }
 
+macro_rules! mymacro {
+    ($name:ident) => {
+        paste! {
+            // Defines a const called `QRST`.
+            fn [<$name _add>](&self, n: usize) {
+                self.activate_fails.add(n);
+                METRICS.net.$name.add(n);
+            }
+        }
+    }
+}
 impl NetDeviceMetricsFns for NetPerDeviceMetrics {
-    fn activate_fails_add(&self, n: usize) {
-        self.activate_fails.add(n);
-        METRICS.net.activate_fails.add(n);
-    }
-    fn rx_bytes_count_add(&self, n: usize) {
-        self.rx_bytes_count.add(n);
-        METRICS.net.rx_bytes_count.add(n);
-    }
+    mymacro!(activate_fails);
+    mymacro!(cfg_fails);
+    mymacro!(mac_address_updates);
+    mymacro!(no_rx_avail_buffer);
+    mymacro!(no_tx_avail_buffer);
+    mymacro!(event_fails);
+    mymacro!(rx_queue_event_count);
+    mymacro!(rx_event_rate_limiter_count);
+    mymacro!(rx_partial_writes);
+    mymacro!(rx_rate_limiter_throttled);
+    mymacro!(rx_tap_event_count);
+    mymacro!(rx_bytes_count);
+    mymacro!(rx_packets_count);
+    mymacro!(rx_fails);
+    mymacro!(rx_count);
+    mymacro!(tap_read_fails);
+    mymacro!(tap_write_fails);
+    mymacro!(tx_bytes_count);
+    mymacro!(tx_malformed_frames);
+    mymacro!(tx_fails);
+    mymacro!(tx_count);
+    mymacro!(tx_packets_count);
+    mymacro!(tx_partial_reads);
+    mymacro!(tx_queue_event_count);
+    mymacro!(tx_rate_limiter_event_count);
+    mymacro!(tx_rate_limiter_throttled);
+    mymacro!(tx_spoofed_mac_count);
 }
 
 // #[derive(Debug, Serialize)]

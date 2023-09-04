@@ -15,10 +15,10 @@ pub type FcLineWriter = std::io::LineWriter<std::fs::File>;
 /// Static instance used for handling metrics.
 pub static METRICS: Metrics<FirecrackerMetrics, FcLineWriter> =
     Metrics::<FirecrackerMetrics, FcLineWriter>::new(FirecrackerMetrics::new());
+#[allow(unused)]
 pub static METRICS1: Metrics<FirecrackerMetrics, FcLineWriter> =
     Metrics::<FirecrackerMetrics, FcLineWriter>::new(FirecrackerMetrics::new());
-pub static METRICS2: Metrics<FirecrackerMetrics, FcLineWriter> =
-    Metrics::<FirecrackerMetrics, FcLineWriter>::new(FirecrackerMetrics::new());
+#[allow(unused)]
 pub static METRICS3: Metrics<FirecrackerMetrics, FcLineWriter> =
     Metrics::<FirecrackerMetrics, FcLineWriter>::new(FirecrackerMetrics::new());
 
@@ -839,9 +839,9 @@ impl PerDevMetrics for PerDevBlockDeviceMetrics{
         if let Ok(mut mapcell) = self.metrics.lock() {
             let mapvalue = mapcell.get_mut();
             // println!(">> {:?}", mapvalue);
-            if mapvalue.contains_key(dev) {
-                println!("{} already exists", dev);
-            }  else {
+            if !mapvalue.contains_key(dev) {
+                // println!("{} already exists", dev);
+            // }  else {
                 mapvalue.insert(dev.to_string(), BlockDeviceMetrics::new());
                 // println!("<<{:?}", value);
             }
@@ -849,6 +849,110 @@ impl PerDevMetrics for PerDevBlockDeviceMetrics{
                 "activate_fails" => {
                     mapvalue["block"].activate_fails.add(value);
                     mapvalue[dev].activate_fails.add(value);
+                }
+                "cfg_fails" => {
+                    mapvalue["block"].cfg_fails.add(value);
+                    mapvalue[dev].cfg_fails.add(value);
+                }
+                "mac_address_updates" => {
+                    mapvalue["block"].mac_address_updates.add(value);
+                    mapvalue[dev].mac_address_updates.add(value);
+                }
+                "no_rx_avail_buffer" => {
+                    mapvalue["block"].no_rx_avail_buffer.add(value);
+                    mapvalue[dev].no_rx_avail_buffer.add(value);
+                }
+                "no_tx_avail_buffer" => {
+                    mapvalue["block"].no_tx_avail_buffer.add(value);
+                    mapvalue[dev].no_tx_avail_buffer.add(value);
+                }
+                "event_fails" => {
+                    mapvalue["block"].event_fails.add(value);
+                    mapvalue[dev].event_fails.add(value);
+                }
+                "rx_queue_event_count" => {
+                    mapvalue["block"].rx_queue_event_count.add(value);
+                    mapvalue[dev].rx_queue_event_count.add(value);
+                }
+                "rx_event_rate_limiter_count" => {
+                    mapvalue["block"].rx_event_rate_limiter_count.add(value);
+                    mapvalue[dev].rx_event_rate_limiter_count.add(value);
+                }
+                "rx_partial_writes" => {
+                    mapvalue["block"].rx_partial_writes.add(value);
+                    mapvalue[dev].rx_partial_writes.add(value);
+                }
+                "rx_rate_limiter_throttled" => {
+                    mapvalue["block"].rx_rate_limiter_throttled.add(value);
+                    mapvalue[dev].rx_rate_limiter_throttled.add(value);
+                }
+                "rx_tap_event_count" => {
+                    mapvalue["block"].rx_tap_event_count.add(value);
+                    mapvalue[dev].rx_tap_event_count.add(value);
+                }
+                "rx_bytes_count" => {
+                    mapvalue["block"].rx_bytes_count.add(value);
+                    mapvalue[dev].rx_bytes_count.add(value);
+                }
+                "rx_packets_count" => {
+                    mapvalue["block"].rx_packets_count.add(value);
+                    mapvalue[dev].rx_packets_count.add(value);
+                }
+                "rx_fails" => {
+                    mapvalue["block"].rx_fails.add(value);
+                    mapvalue[dev].rx_fails.add(value);
+                }
+                "rx_count" => {
+                    mapvalue["block"].rx_count.add(value);
+                    mapvalue[dev].rx_count.add(value);
+                }
+                "tap_read_fails" => {
+                    mapvalue["block"].tap_read_fails.add(value);
+                    mapvalue[dev].tap_read_fails.add(value);
+                }
+                "tap_write_fails" => {
+                    mapvalue["block"].tap_write_fails.add(value);
+                    mapvalue[dev].tap_write_fails.add(value);
+                }
+                "tx_bytes_count" => {
+                    mapvalue["block"].tx_bytes_count.add(value);
+                    mapvalue[dev].tx_bytes_count.add(value);
+                }
+                "tx_malformed_frames" => {
+                    mapvalue["block"].tx_malformed_frames.add(value);
+                    mapvalue[dev].tx_malformed_frames.add(value);
+                }
+                "tx_fails" => {
+                    mapvalue["block"].tx_fails.add(value);
+                    mapvalue[dev].tx_fails.add(value);
+                }
+                "tx_count" => {
+                    mapvalue["block"].tx_count.add(value);
+                    mapvalue[dev].tx_count.add(value);
+                }
+                "tx_packets_count" => {
+                    mapvalue["block"].tx_packets_count.add(value);
+                    mapvalue[dev].tx_packets_count.add(value);
+                }
+                "tx_partial_reads" => {
+                    mapvalue["block"].tx_partial_reads.add(value);
+                    mapvalue[dev].tx_partial_reads.add(value);
+                }
+                "tx_queue_event_count" => {
+                    mapvalue["block"].tx_queue_event_count.add(value);
+                    mapvalue[dev].tx_queue_event_count.add(value);
+                }
+                "tx_rate_limiter_event_count" => {
+                    mapvalue["block"].tx_rate_limiter_event_count.add(value);
+                    mapvalue[dev].tx_rate_limiter_event_count.add(value);
+                }
+                "tx_rate_limiter_throttled" => {
+                    mapvalue["block"].tx_rate_limiter_throttled.add(value);
+                    mapvalue[dev].tx_rate_limiter_throttled.add(value);
+                }
+                "tx_spoofed_mac_count" => {
+                    mapvalue["block"].tx_spoofed_mac_count.add(value);
+                    mapvalue[dev].tx_spoofed_mac_count.add(value);
                 }
                 _ => panic!("Unsupported metric"),
             }
