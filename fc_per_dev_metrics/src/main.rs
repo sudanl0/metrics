@@ -1,29 +1,15 @@
 mod metrics;
 mod netdevice;
-use crate::metrics::METRICS;
+use crate::metrics::{METRICS, Metrics, FirecrackerMetrics};
 use crate::metrics::IncMetricPerDev;
 use crate::metrics::PerDevMetrics;
 use crate::netdevice::Net;
-use crate::netdevice::NetDeviceMetricsFns;
+use crate::netdevice::{flush_net_metrics, NetDeviceMetricsFns};
 use std::time::SystemTime;
+use std::io::LineWriter;
+use std::fs::File;
 
-
-fn main(){
-    use std::io::LineWriter;
-    use std::fs::File;
-    let m = &METRICS;
-
-    let res = m.write();
-    assert!(res.is_ok() && !res.unwrap());
-
-    let f = File::create("./metrics.json").expect("Failed to create temporary metrics file");
-    assert!(m.init(LineWriter::new(f)).is_ok());
-    assert!(m.write().is_ok());
-
-    //////////////////////////////////////////////////////////////////////////////////////////
-    /////////// BTreeMap in PerDevBlockDeviceMetrics
-    //////////////////////////////////////////////////////////////////////////////////////////
-
+fn test_block_metrics(m: &Metrics<FirecrackerMetrics, LineWriter<File>>){
     let t0 = SystemTime::now();
     METRICS.block.add(&String::from("block0"), "activate_fails", 10);
     METRICS.block.add(&String::from("block0"), "cfg_fails", 10);
@@ -80,13 +66,14 @@ fn main(){
     METRICS.block.add(&String::from("block1"), "tx_rate_limiter_throttled", 10);
     METRICS.block.add(&String::from("block1"), "tx_spoofed_mac_count", 10);
     let t1 = SystemTime::now();
-    println!("{:?}", t1.duration_since(t0).unwrap());
+    println!("Time take to update metrics when BTreeMap is part of PerDevMetrics in FcMetrics: {:?}", t1.duration_since(t0).unwrap());
+    let t0 = SystemTime::now();
     assert!(m.write().is_ok());
+    let t1 = SystemTime::now();
+    println!("Time take to flush metrics when BTreeMap is part of PerDevMetrics in FcMetrics: {:?}", t1.duration_since(t0).unwrap());
+}
 
-    //////////////////////////////////////////////////////////////////////////////////////////
-    /////////// BTreeMap in SharedIncMetricPerDev
-    //////////////////////////////////////////////////////////////////////////////////////////
-
+fn test_vsock_metrics(m: &Metrics<FirecrackerMetrics, LineWriter<File>>){
     let t0 = SystemTime::now();
     METRICS.vsock.activate_fails.add(&String::from("vsock0"), 10);
     METRICS.vsock.cfg_fails.add(&String::from("vsock0"), 10);
@@ -143,14 +130,14 @@ fn main(){
     METRICS.vsock.tx_rate_limiter_throttled.add(&String::from("vsock1"), 10);
     METRICS.vsock.tx_spoofed_mac_count.add(&String::from("vsock1"), 10);
     let t1 = SystemTime::now();
-    println!("{:?}", t1.duration_since(t0).unwrap());
+    println!("Time take to update metrics when BTreeMap is part of SharedIncMetrics: {:?}", t1.duration_since(t0).unwrap());
+    let t0 = SystemTime::now();
     assert!(m.write().is_ok());
+    let t1 = SystemTime::now();
+    println!("Time take to flush metrics when BTreeMap is part of SharedIncMetrics: {:?}", t1.duration_since(t0).unwrap());
+}
 
-    //////////////////////////////////////////////////////////////////////////////////////////
-    /////////// NetDeviceMetrics moved to Net as NetPerDeviceMetrics with
-    /////////// aggregate using trait and no BTreeMap
-    //////////////////////////////////////////////////////////////////////////////////////////
-
+fn test_net_metrics(m: &Metrics<FirecrackerMetrics, LineWriter<File>>){
     let net0 = Net::new(String::from("net0"));
     let net1 = Net::new(String::from("net1"));
     let t0 = SystemTime::now();
@@ -209,33 +196,71 @@ fn main(){
     net1.metrics.tx_rate_limiter_throttled_add(10);
     net1.metrics.tx_spoofed_mac_count_add(10);
     let t1 = SystemTime::now();
-    println!("{:?}", t1.duration_since(t0).unwrap());
+    println!("Time take to update metrics when they are part of Net: {:?}", t1.duration_since(t0).unwrap());
     assert!(m.write().is_ok());
-    match serde_json::to_string_pretty(&net0){
-        Ok(net_metrics_serbuf) => {
-            assert!(m.write_devmetrics(net_metrics_serbuf).is_ok());
-        }
-        Err(err) => println!("{}", err.to_string())
-    }
-    match serde_json::to_string_pretty(&net1){
-        Ok(net_metrics_serbuf) => {
-            assert!(m.write_devmetrics(net_metrics_serbuf).is_ok());
-        }
-        Err(err) => println!("{}", err.to_string())
-    }
+    let t0 = SystemTime::now();
+    flush_net_metrics(m);
+    net0.metrics.flush_metrics(m);
+    net1.metrics.flush_metrics(m);
+    // match serde_json::to_string_pretty(&net){
+    //     Ok(net_metrics_serbuf) => {
+    //         assert!(m.write_devmetrics(net_metrics_serbuf).is_ok());
+    //     }
+    //     Err(err) => println!("{}", err.to_string())
+    // }
+    // match serde_json::to_string_pretty(&net0){
+    //     Ok(net_metrics_serbuf) => {
+    //         assert!(m.write_devmetrics(net_metrics_serbuf).is_ok());
+    //     }
+    //     Err(err) => println!("{}", err.to_string())
+    // }
+    // match serde_json::to_string_pretty(&net1){
+    //     Ok(net_metrics_serbuf) => {
+    //         assert!(m.write_devmetrics(net_metrics_serbuf).is_ok());
+    //     }
+    //     Err(err) => println!("{}", err.to_string())
+    // }
+    let t1 = SystemTime::now();
+    println!("Time take to flush metrics when they are part of Net: {:?}", t1.duration_since(t0).unwrap());
+}
+
+fn main(){
+    let m = &METRICS;
+
+    let res = m.write();
+    assert!(res.is_ok() && !res.unwrap());
+
+    let f = File::create("./metrics.json").expect("Failed to create temporary metrics file");
+    assert!(m.init(LineWriter::new(f)).is_ok());
+    assert!(m.write().is_ok());
+
+    //////////////////////////////////////////////////////////////////////////////////////////
+    /////////// BTreeMap in PerDevBlockDeviceMetrics
+    //////////////////////////////////////////////////////////////////////////////////////////
+
+    test_block_metrics(m);
+    //////////////////////////////////////////////////////////////////////////////////////////
+    /////////// BTreeMap in SharedIncMetricPerDev
+    //////////////////////////////////////////////////////////////////////////////////////////
+
+    test_vsock_metrics(m);
+    //////////////////////////////////////////////////////////////////////////////////////////
+    /////////// NetDeviceMetrics moved to Net as NetPerDeviceMetrics with
+    /////////// aggregate using trait and no BTreeMap
+    //////////////////////////////////////////////////////////////////////////////////////////
+
+    test_net_metrics(m);
 }
 
 #[cfg(test)]
 mod tests {
     use crate::metrics::{METRICS, METRICS1, METRICS3};
-    use std::time::SystemTime;
+    use crate::{test_block_metrics, test_vsock_metrics, test_net_metrics};
     use std::io::LineWriter;
     use std::fs::File;
     
     #[test]
-    fn test_btree_mapin_per_dev_block_device_metrics() {
-        // average 100usecs on my machine
-        use crate::metrics::PerDevMetrics;
+    fn test_block_metrics_proposal() {
         let m = &METRICS;
         let res = m.write();
         assert!(res.is_ok() && !res.unwrap());
@@ -244,19 +269,11 @@ mod tests {
         assert!(m.init(LineWriter::new(f)).is_ok());
         assert!(m.write().is_ok());
 
-        let t0 = SystemTime::now();
-        METRICS.block.add(&String::from("block0"), "activate_fails", 10);
-        METRICS.block.add(&String::from("block1"), "activate_fails", 10);
-        assert!(m.write().is_ok());
-        let t1 = SystemTime::now();
-
-        println!("[test_btree_mapin_per_dev_block_device_metrics] : {:?}", t1.duration_since(t0).unwrap());
+        test_block_metrics(m);
     }
 
     #[test]
-    fn test_btree_mapin_shared_inc_metric_per_dev() {
-        // average 80usecs on my machine
-        use crate::metrics::IncMetricPerDev;
+    fn test_vsock_metrics_proposal() {
         let m = &METRICS1;
         let res = m.write();
         assert!(res.is_ok() && !res.unwrap());
@@ -265,21 +282,11 @@ mod tests {
         assert!(m.init(LineWriter::new(f)).is_ok());
         assert!(m.write().is_ok());
 
-        let t0 = SystemTime::now();
-        METRICS.vsock.activate_fails.add(&String::from("vsock0"), 10);
-        METRICS.vsock.activate_fails.add(&String::from("vsock1"), 20);
-        assert!(m.write().is_ok());
-        let t1 = SystemTime::now();
-
-        println!("[test_btree_mapin_shared_inc_metric_per_dev] : {:?}", t1.duration_since(t0).unwrap());
+        test_vsock_metrics(m);
     }
 
     #[test]
-    fn test_aggregate() {
-        // average 105usecs on my machine
-        use crate::netdevice::Net;
-        use crate::netdevice::NetDeviceMetricsFns;
-        use std::time::SystemTime;
+    fn test_net_metrics_proposal() {
         use std::io::LineWriter;
         use std::fs::File;
         let m = &METRICS3;
@@ -287,31 +294,10 @@ mod tests {
         let res = m.write();
         assert!(res.is_ok() && !res.unwrap());
 
-        let f = File::create("./neta_metrics.json").expect("Failed to create temporary metrics file");
+        let f = File::create("./net_metrics.json").expect("Failed to create temporary metrics file");
         assert!(m.init(LineWriter::new(f)).is_ok());
         assert!(m.write().is_ok());
 
-        let net0 = Net::new(String::from("net0"));
-        let net1 = Net::new(String::from("net1"));
-
-        let t0 = SystemTime::now();
-        net0.metrics.activate_fails_add(20);
-        net1.metrics.activate_fails_add(40);
-        assert!(m.write().is_ok());
-        match serde_json::to_string_pretty(&net0){
-            Ok(net_metrics_serbuf) => {
-                assert!(m.write_devmetrics(net_metrics_serbuf).is_ok());
-            }
-            Err(err) => println!("{}", err.to_string())
-        }
-        match serde_json::to_string_pretty(&net1){
-            Ok(net_metrics_serbuf) => {
-                assert!(m.write_devmetrics(net_metrics_serbuf).is_ok());
-            }
-            Err(err) => println!("{}", err.to_string())
-        }
-        let t1 = SystemTime::now();
-
-        println!("[test_aggregate] : {:?}", t1.duration_since(t0).unwrap());
+        test_net_metrics(m);
     }
 }

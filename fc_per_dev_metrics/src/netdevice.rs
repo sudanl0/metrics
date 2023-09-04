@@ -1,12 +1,25 @@
-use crate::metrics::{METRICS, SharedIncMetric,IncMetric};
+use crate::metrics::{Metrics, FirecrackerMetrics, SharedIncMetric, IncMetric};
+use std::io::LineWriter;
+use std::fs::File;
 use serde::{Serialize, ser::SerializeMap};
 use paste::paste;
 
+static NET: NetDeviceMetrics = NetDeviceMetrics::new();
+
+pub fn flush_net_metrics(metric_writer: &Metrics<FirecrackerMetrics, LineWriter<File>>) {
+    match serde_json::to_string_pretty(&NET){
+        Ok(net_metrics_serbuf) => {
+            assert!(metric_writer.write_devmetrics(net_metrics_serbuf).is_ok());
+        }
+        Err(err) => println!("{}", err.to_string())
+    }
+}
+
 /// Network-related metrics.
 #[derive(Debug, Default, Serialize)]
-pub struct NetPerDeviceMetrics {
+pub struct NetDeviceMetrics {
     /// Number of times when activate failed on a network device.
-    activate_fails: SharedIncMetric,
+    pub activate_fails: SharedIncMetric,
     /// Number of times when interacting with the space config of a network device failed.
     pub cfg_fails: SharedIncMetric,
     //// Number of times the mac address was updated through the config space.
@@ -60,7 +73,7 @@ pub struct NetPerDeviceMetrics {
     /// Number of packets with a spoofed mac, sent by the guest.
     pub tx_spoofed_mac_count: SharedIncMetric,
 }
-impl NetPerDeviceMetrics {
+impl NetDeviceMetrics {
     /// Const default construction.
     pub const fn new() -> Self {
         Self {
@@ -123,54 +136,64 @@ pub trait NetDeviceMetricsFns {
     fn tx_rate_limiter_event_count_add(&self, n: usize);
     fn tx_rate_limiter_throttled_add(&self, n: usize);
     fn tx_spoofed_mac_count_add(&self, n: usize);
+    fn flush_metrics(&self, metric_writer: &Metrics<FirecrackerMetrics, LineWriter<File>>);
 }
 
-macro_rules! mymacro {
+macro_rules! metrics_add {
     ($name:ident) => {
         paste! {
             // Defines a const called `QRST`.
             fn [<$name _add>](&self, n: usize) {
-                self.activate_fails.add(n);
-                METRICS.net.$name.add(n);
+                self.$name.add(n);
+                NET.$name.add(n);
             }
         }
     }
 }
-impl NetDeviceMetricsFns for NetPerDeviceMetrics {
-    mymacro!(activate_fails);
-    mymacro!(cfg_fails);
-    mymacro!(mac_address_updates);
-    mymacro!(no_rx_avail_buffer);
-    mymacro!(no_tx_avail_buffer);
-    mymacro!(event_fails);
-    mymacro!(rx_queue_event_count);
-    mymacro!(rx_event_rate_limiter_count);
-    mymacro!(rx_partial_writes);
-    mymacro!(rx_rate_limiter_throttled);
-    mymacro!(rx_tap_event_count);
-    mymacro!(rx_bytes_count);
-    mymacro!(rx_packets_count);
-    mymacro!(rx_fails);
-    mymacro!(rx_count);
-    mymacro!(tap_read_fails);
-    mymacro!(tap_write_fails);
-    mymacro!(tx_bytes_count);
-    mymacro!(tx_malformed_frames);
-    mymacro!(tx_fails);
-    mymacro!(tx_count);
-    mymacro!(tx_packets_count);
-    mymacro!(tx_partial_reads);
-    mymacro!(tx_queue_event_count);
-    mymacro!(tx_rate_limiter_event_count);
-    mymacro!(tx_rate_limiter_throttled);
-    mymacro!(tx_spoofed_mac_count);
+
+impl NetDeviceMetricsFns for NetDeviceMetrics {
+    metrics_add!(activate_fails);
+    metrics_add!(cfg_fails);
+    metrics_add!(mac_address_updates);
+    metrics_add!(no_rx_avail_buffer);
+    metrics_add!(no_tx_avail_buffer);
+    metrics_add!(event_fails);
+    metrics_add!(rx_queue_event_count);
+    metrics_add!(rx_event_rate_limiter_count);
+    metrics_add!(rx_partial_writes);
+    metrics_add!(rx_rate_limiter_throttled);
+    metrics_add!(rx_tap_event_count);
+    metrics_add!(rx_bytes_count);
+    metrics_add!(rx_packets_count);
+    metrics_add!(rx_fails);
+    metrics_add!(rx_count);
+    metrics_add!(tap_read_fails);
+    metrics_add!(tap_write_fails);
+    metrics_add!(tx_bytes_count);
+    metrics_add!(tx_malformed_frames);
+    metrics_add!(tx_fails);
+    metrics_add!(tx_count);
+    metrics_add!(tx_packets_count);
+    metrics_add!(tx_partial_reads);
+    metrics_add!(tx_queue_event_count);
+    metrics_add!(tx_rate_limiter_event_count);
+    metrics_add!(tx_rate_limiter_throttled);
+    metrics_add!(tx_spoofed_mac_count);
+    fn flush_metrics(&self, metric_writer: &Metrics<FirecrackerMetrics, LineWriter<File>>) {
+        match serde_json::to_string_pretty(&NET){
+            Ok(net_metrics_serbuf) => {
+                assert!(metric_writer.write_devmetrics(net_metrics_serbuf).is_ok());
+            }
+            Err(err) => println!("{}", err.to_string())
+        }
+    }    
 }
 
 // #[derive(Debug, Serialize)]
 // #[serde(deny_unknown_fields)]
 pub struct Net{
     pub(crate) id: String,
-    pub(crate) metrics: NetPerDeviceMetrics,
+    pub(crate) metrics: NetDeviceMetrics,
 }
 
 impl Serialize for Net{
@@ -189,7 +212,7 @@ impl Net{
     pub fn new(id: String) -> Net{
         Net{
             id,
-            metrics: NetPerDeviceMetrics::new()
+            metrics: NetDeviceMetrics::new()
         }
     }
 }
