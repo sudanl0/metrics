@@ -15,6 +15,12 @@ pub type FcLineWriter = std::io::LineWriter<std::fs::File>;
 /// Static instance used for handling metrics.
 pub static METRICS: Metrics<FirecrackerMetrics, FcLineWriter> =
     Metrics::<FirecrackerMetrics, FcLineWriter>::new(FirecrackerMetrics::new());
+pub static METRICS1: Metrics<FirecrackerMetrics, FcLineWriter> =
+    Metrics::<FirecrackerMetrics, FcLineWriter>::new(FirecrackerMetrics::new());
+pub static METRICS2: Metrics<FirecrackerMetrics, FcLineWriter> =
+    Metrics::<FirecrackerMetrics, FcLineWriter>::new(FirecrackerMetrics::new());
+pub static METRICS3: Metrics<FirecrackerMetrics, FcLineWriter> =
+    Metrics::<FirecrackerMetrics, FcLineWriter>::new(FirecrackerMetrics::new());
 
 /// Metrics system.
 // All member fields have types which are Sync, and exhibit interior mutability, so
@@ -260,15 +266,90 @@ impl Serialize for SharedStoreMetric {
 pub struct NetDeviceMetrics {
     /// Number of times when activate failed on a network device.
     pub activate_fails: SharedIncMetric,
+    /// Number of times when interacting with the space config of a network device failed.
+    pub cfg_fails: SharedIncMetric,
+    //// Number of times the mac address was updated through the config space.
+    pub mac_address_updates: SharedIncMetric,
+    /// No available buffer for the net device rx queue.
+    pub no_rx_avail_buffer: SharedIncMetric,
+    /// No available buffer for the net device tx queue.
+    pub no_tx_avail_buffer: SharedIncMetric,
+    /// Number of times when handling events on a network device failed.
+    pub event_fails: SharedIncMetric,
+    /// Number of events associated with the receiving queue.
+    pub rx_queue_event_count: SharedIncMetric,
+    /// Number of events associated with the rate limiter installed on the receiving path.
+    pub rx_event_rate_limiter_count: SharedIncMetric,
+    /// Number of RX partial writes to guest.
+    pub rx_partial_writes: SharedIncMetric,
+    /// Number of RX rate limiter throttling events.
+    pub rx_rate_limiter_throttled: SharedIncMetric,
+    /// Number of events received on the associated tap.
+    pub rx_tap_event_count: SharedIncMetric,
     /// Number of bytes received.
     pub rx_bytes_count: SharedIncMetric,
+    /// Number of packets received.
+    pub rx_packets_count: SharedIncMetric,
+    /// Number of errors while receiving data.
+    pub rx_fails: SharedIncMetric,
+    /// Number of successful read operations while receiving data.
+    pub rx_count: SharedIncMetric,
+    /// Number of times reading from TAP failed.
+    pub tap_read_fails: SharedIncMetric,
+    /// Number of times writing to TAP failed.
+    pub tap_write_fails: SharedIncMetric,
+    /// Number of transmitted bytes.
+    pub tx_bytes_count: SharedIncMetric,
+    /// Number of malformed TX frames.
+    pub tx_malformed_frames: SharedIncMetric,
+    /// Number of errors while transmitting data.
+    pub tx_fails: SharedIncMetric,
+    /// Number of successful write operations while transmitting data.
+    pub tx_count: SharedIncMetric,
+    /// Number of transmitted packets.
+    pub tx_packets_count: SharedIncMetric,
+    /// Number of TX partial reads from guest.
+    pub tx_partial_reads: SharedIncMetric,
+    /// Number of events associated with the transmitting queue.
+    pub tx_queue_event_count: SharedIncMetric,
+    /// Number of events associated with the rate limiter installed on the transmitting path.
+    pub tx_rate_limiter_event_count: SharedIncMetric,
+    /// Number of RX rate limiter throttling events.
+    pub tx_rate_limiter_throttled: SharedIncMetric,
+    /// Number of packets with a spoofed mac, sent by the guest.
+    pub tx_spoofed_mac_count: SharedIncMetric,
 }
 impl NetDeviceMetrics {
     /// Const default construction.
     pub const fn new() -> Self {
         Self {
             activate_fails: SharedIncMetric::new(),
+            cfg_fails: SharedIncMetric::new(),
+            mac_address_updates: SharedIncMetric::new(),
+            no_rx_avail_buffer: SharedIncMetric::new(),
+            no_tx_avail_buffer: SharedIncMetric::new(),
+            event_fails: SharedIncMetric::new(),
+            rx_queue_event_count: SharedIncMetric::new(),
+            rx_event_rate_limiter_count: SharedIncMetric::new(),
+            rx_partial_writes: SharedIncMetric::new(),
+            rx_rate_limiter_throttled: SharedIncMetric::new(),
+            rx_tap_event_count: SharedIncMetric::new(),
             rx_bytes_count: SharedIncMetric::new(),
+            rx_packets_count: SharedIncMetric::new(),
+            rx_fails: SharedIncMetric::new(),
+            rx_count: SharedIncMetric::new(),
+            tap_read_fails: SharedIncMetric::new(),
+            tap_write_fails: SharedIncMetric::new(),
+            tx_bytes_count: SharedIncMetric::new(),
+            tx_malformed_frames: SharedIncMetric::new(),
+            tx_fails: SharedIncMetric::new(),
+            tx_count: SharedIncMetric::new(),
+            tx_packets_count: SharedIncMetric::new(),
+            tx_partial_reads: SharedIncMetric::new(),
+            tx_queue_event_count: SharedIncMetric::new(),
+            tx_rate_limiter_event_count: SharedIncMetric::new(),
+            tx_rate_limiter_throttled: SharedIncMetric::new(),
+            tx_spoofed_mac_count: SharedIncMetric::new(),
         }
     }
 }
@@ -276,17 +357,92 @@ impl NetDeviceMetrics {
 /// Block Device associated metrics.
 #[derive(Debug, Default, Serialize)]
 pub struct BlockDeviceMetrics {
-    /// Number of times when activate failed on a block device.
+    /// Number of times when activate failed on a network device.
     pub activate_fails: SharedIncMetric,
-    /// Number of bytes read by this block device.
-    pub read_bytes: SharedIncMetric,
+    /// Number of times when interacting with the space config of a network device failed.
+    pub cfg_fails: SharedIncMetric,
+    //// Number of times the mac address was updated through the config space.
+    pub mac_address_updates: SharedIncMetric,
+    /// No available buffer for the net device rx queue.
+    pub no_rx_avail_buffer: SharedIncMetric,
+    /// No available buffer for the net device tx queue.
+    pub no_tx_avail_buffer: SharedIncMetric,
+    /// Number of times when handling events on a network device failed.
+    pub event_fails: SharedIncMetric,
+    /// Number of events associated with the receiving queue.
+    pub rx_queue_event_count: SharedIncMetric,
+    /// Number of events associated with the rate limiter installed on the receiving path.
+    pub rx_event_rate_limiter_count: SharedIncMetric,
+    /// Number of RX partial writes to guest.
+    pub rx_partial_writes: SharedIncMetric,
+    /// Number of RX rate limiter throttling events.
+    pub rx_rate_limiter_throttled: SharedIncMetric,
+    /// Number of events received on the associated tap.
+    pub rx_tap_event_count: SharedIncMetric,
+    /// Number of bytes received.
+    pub rx_bytes_count: SharedIncMetric,
+    /// Number of packets received.
+    pub rx_packets_count: SharedIncMetric,
+    /// Number of errors while receiving data.
+    pub rx_fails: SharedIncMetric,
+    /// Number of successful read operations while receiving data.
+    pub rx_count: SharedIncMetric,
+    /// Number of times reading from TAP failed.
+    pub tap_read_fails: SharedIncMetric,
+    /// Number of times writing to TAP failed.
+    pub tap_write_fails: SharedIncMetric,
+    /// Number of transmitted bytes.
+    pub tx_bytes_count: SharedIncMetric,
+    /// Number of malformed TX frames.
+    pub tx_malformed_frames: SharedIncMetric,
+    /// Number of errors while transmitting data.
+    pub tx_fails: SharedIncMetric,
+    /// Number of successful write operations while transmitting data.
+    pub tx_count: SharedIncMetric,
+    /// Number of transmitted packets.
+    pub tx_packets_count: SharedIncMetric,
+    /// Number of TX partial reads from guest.
+    pub tx_partial_reads: SharedIncMetric,
+    /// Number of events associated with the transmitting queue.
+    pub tx_queue_event_count: SharedIncMetric,
+    /// Number of events associated with the rate limiter installed on the transmitting path.
+    pub tx_rate_limiter_event_count: SharedIncMetric,
+    /// Number of RX rate limiter throttling events.
+    pub tx_rate_limiter_throttled: SharedIncMetric,
+    /// Number of packets with a spoofed mac, sent by the guest.
+    pub tx_spoofed_mac_count: SharedIncMetric,
 }
 impl BlockDeviceMetrics {
     /// Const default construction.
     pub const fn new() -> Self {
         Self {
             activate_fails: SharedIncMetric::new(),
-            read_bytes: SharedIncMetric::new(),
+            cfg_fails: SharedIncMetric::new(),
+            mac_address_updates: SharedIncMetric::new(),
+            no_rx_avail_buffer: SharedIncMetric::new(),
+            no_tx_avail_buffer: SharedIncMetric::new(),
+            event_fails: SharedIncMetric::new(),
+            rx_queue_event_count: SharedIncMetric::new(),
+            rx_event_rate_limiter_count: SharedIncMetric::new(),
+            rx_partial_writes: SharedIncMetric::new(),
+            rx_rate_limiter_throttled: SharedIncMetric::new(),
+            rx_tap_event_count: SharedIncMetric::new(),
+            rx_bytes_count: SharedIncMetric::new(),
+            rx_packets_count: SharedIncMetric::new(),
+            rx_fails: SharedIncMetric::new(),
+            rx_count: SharedIncMetric::new(),
+            tap_read_fails: SharedIncMetric::new(),
+            tap_write_fails: SharedIncMetric::new(),
+            tx_bytes_count: SharedIncMetric::new(),
+            tx_malformed_frames: SharedIncMetric::new(),
+            tx_fails: SharedIncMetric::new(),
+            tx_count: SharedIncMetric::new(),
+            tx_packets_count: SharedIncMetric::new(),
+            tx_partial_reads: SharedIncMetric::new(),
+            tx_queue_event_count: SharedIncMetric::new(),
+            tx_rate_limiter_event_count: SharedIncMetric::new(),
+            tx_rate_limiter_throttled: SharedIncMetric::new(),
+            tx_spoofed_mac_count: SharedIncMetric::new(),
         }
     }
 }
@@ -363,15 +519,63 @@ impl IncMetricPerDev for SharedIncMetricPerDev {
 }
 
 /// Network-related metrics.
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default)]
 pub struct VsockMetrics {
-    /// Number of times when activate failed on a network device.
-    #[serde(skip_serializing)]
     // #[serde(flatten, with = "as_perdev")]
+    /// Number of times when activate failed on a network device.
     pub activate_fails: Lazy<SharedIncMetricPerDev>,
+    /// Number of times when interacting with the space config of a network device failed.
+    pub cfg_fails: Lazy<SharedIncMetricPerDev>,
+    //// Number of times the mac address was updated through the config space.
+    pub mac_address_updates: Lazy<SharedIncMetricPerDev>,
+    /// No available buffer for the net device rx queue.
+    pub no_rx_avail_buffer: Lazy<SharedIncMetricPerDev>,
+    /// No available buffer for the net device tx queue.
+    pub no_tx_avail_buffer: Lazy<SharedIncMetricPerDev>,
+    /// Number of times when handling events on a network device failed.
+    pub event_fails: Lazy<SharedIncMetricPerDev>,
+    /// Number of events associated with the receiving queue.
+    pub rx_queue_event_count: Lazy<SharedIncMetricPerDev>,
+    /// Number of events associated with the rate limiter installed on the receiving path.
+    pub rx_event_rate_limiter_count: Lazy<SharedIncMetricPerDev>,
+    /// Number of RX partial writes to guest.
+    pub rx_partial_writes: Lazy<SharedIncMetricPerDev>,
+    /// Number of RX rate limiter throttling events.
+    pub rx_rate_limiter_throttled: Lazy<SharedIncMetricPerDev>,
+    /// Number of events received on the associated tap.
+    pub rx_tap_event_count: Lazy<SharedIncMetricPerDev>,
     /// Number of bytes received.
-    #[serde(skip_serializing)]
     pub rx_bytes_count: Lazy<SharedIncMetricPerDev>,
+    /// Number of packets received.
+    pub rx_packets_count: Lazy<SharedIncMetricPerDev>,
+    /// Number of errors while receiving data.
+    pub rx_fails: Lazy<SharedIncMetricPerDev>,
+    /// Number of successful read operations while receiving data.
+    pub rx_count: Lazy<SharedIncMetricPerDev>,
+    /// Number of times reading from TAP failed.
+    pub tap_read_fails: Lazy<SharedIncMetricPerDev>,
+    /// Number of times writing to TAP failed.
+    pub tap_write_fails: Lazy<SharedIncMetricPerDev>,
+    /// Number of transmitted bytes.
+    pub tx_bytes_count: Lazy<SharedIncMetricPerDev>,
+    /// Number of malformed TX frames.
+    pub tx_malformed_frames: Lazy<SharedIncMetricPerDev>,
+    /// Number of errors while transmitting data.
+    pub tx_fails: Lazy<SharedIncMetricPerDev>,
+    /// Number of successful write operations while transmitting data.
+    pub tx_count: Lazy<SharedIncMetricPerDev>,
+    /// Number of transmitted packets.
+    pub tx_packets_count: Lazy<SharedIncMetricPerDev>,
+    /// Number of TX partial reads from guest.
+    pub tx_partial_reads: Lazy<SharedIncMetricPerDev>,
+    /// Number of events associated with the transmitting queue.
+    pub tx_queue_event_count: Lazy<SharedIncMetricPerDev>,
+    /// Number of events associated with the rate limiter installed on the transmitting path.
+    pub tx_rate_limiter_event_count: Lazy<SharedIncMetricPerDev>,
+    /// Number of RX rate limiter throttling events.
+    pub tx_rate_limiter_throttled: Lazy<SharedIncMetricPerDev>,
+    /// Number of packets with a spoofed mac, sent by the guest.
+    pub tx_spoofed_mac_count: Lazy<SharedIncMetricPerDev>,
 }
 
 mod as_perdev {
@@ -383,7 +587,32 @@ mod as_perdev {
     #[derive(Serialize)]
     struct VsockMetricsSerialized {
         pub activate_fails: u64,
+        pub cfg_fails: u64,
+        pub mac_address_updates: u64,
+        pub no_rx_avail_buffer: u64,
+        pub no_tx_avail_buffer: u64,
+        pub event_fails: u64,
+        pub rx_queue_event_count: u64,
+        pub rx_event_rate_limiter_count: u64,
+        pub rx_partial_writes: u64,
+        pub rx_rate_limiter_throttled: u64,
+        pub rx_tap_event_count: u64,
         pub rx_bytes_count: u64,
+        pub rx_packets_count: u64,
+        pub rx_fails: u64,
+        pub rx_count: u64,
+        pub tap_read_fails: u64,
+        pub tap_write_fails: u64,
+        pub tx_bytes_count: u64,
+        pub tx_malformed_frames: u64,
+        pub tx_fails: u64,
+        pub tx_count: u64,
+        pub tx_packets_count: u64,
+        pub tx_partial_reads: u64,
+        pub tx_queue_event_count: u64,
+        pub tx_rate_limiter_event_count: u64,
+        pub tx_rate_limiter_throttled: u64,
+        pub tx_spoofed_mac_count: u64,        
     }
     pub fn serialize<S>(base: &VsockMetrics, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -404,15 +633,65 @@ mod as_perdev {
                     }else{
                         vsockmetric.insert(String::from(k), VsockMetricsSerialized{
                             activate_fails: metr,
+                            cfg_fails: 0,
+                            mac_address_updates: 0,
+                            no_rx_avail_buffer: 0,
+                            no_tx_avail_buffer: 0,
+                            event_fails: 0,
+                            rx_queue_event_count: 0,
+                            rx_event_rate_limiter_count: 0,
+                            rx_partial_writes: 0,
+                            rx_rate_limiter_throttled: 0,
+                            rx_tap_event_count: 0,
                             rx_bytes_count: 0,
+                            rx_packets_count: 0,
+                            rx_fails: 0,
+                            rx_count: 0,
+                            tap_read_fails: 0,
+                            tap_write_fails: 0,
+                            tx_bytes_count: 0,
+                            tx_malformed_frames: 0,
+                            tx_fails: 0,
+                            tx_count: 0,
+                            tx_packets_count: 0,
+                            tx_partial_reads: 0,
+                            tx_queue_event_count: 0,
+                            tx_rate_limiter_event_count: 0,
+                            tx_rate_limiter_throttled: 0,
+                            tx_spoofed_mac_count: 0,                            
                         });
                     }
                 }
             };
         }
         mymacro!(activate_fails);
+        mymacro!(cfg_fails);
+        mymacro!(mac_address_updates);
+        mymacro!(no_rx_avail_buffer);
+        mymacro!(no_tx_avail_buffer);
+        mymacro!(event_fails);
+        mymacro!(rx_queue_event_count);
+        mymacro!(rx_event_rate_limiter_count);
+        mymacro!(rx_partial_writes);
+        mymacro!(rx_rate_limiter_throttled);
+        mymacro!(rx_tap_event_count);
         mymacro!(rx_bytes_count);
-
+        mymacro!(rx_packets_count);
+        mymacro!(rx_fails);
+        mymacro!(rx_count);
+        mymacro!(tap_read_fails);
+        mymacro!(tap_write_fails);
+        mymacro!(tx_bytes_count);
+        mymacro!(tx_malformed_frames);
+        mymacro!(tx_fails);
+        mymacro!(tx_count);
+        mymacro!(tx_packets_count);
+        mymacro!(tx_partial_reads);
+        mymacro!(tx_queue_event_count);
+        mymacro!(tx_rate_limiter_event_count);
+        mymacro!(tx_rate_limiter_throttled);
+        mymacro!(tx_spoofed_mac_count);
+        
         let mut seq = serializer.serialize_map(Some(vsockmetric.len()))?;
         for (k, v) in vsockmetric.iter() {
             seq.serialize_entry(k, &v)?;
@@ -427,7 +706,32 @@ impl VsockMetrics {
     pub const fn new() -> Self {
         Self {
             activate_fails: Lazy::new(SharedIncMetricPerDev::new),
+            cfg_fails: Lazy::new(SharedIncMetricPerDev::new),
+            mac_address_updates: Lazy::new(SharedIncMetricPerDev::new),
+            no_rx_avail_buffer: Lazy::new(SharedIncMetricPerDev::new),
+            no_tx_avail_buffer: Lazy::new(SharedIncMetricPerDev::new),
+            event_fails: Lazy::new(SharedIncMetricPerDev::new),
+            rx_queue_event_count: Lazy::new(SharedIncMetricPerDev::new),
+            rx_event_rate_limiter_count: Lazy::new(SharedIncMetricPerDev::new),
+            rx_partial_writes: Lazy::new(SharedIncMetricPerDev::new),
+            rx_rate_limiter_throttled: Lazy::new(SharedIncMetricPerDev::new),
+            rx_tap_event_count: Lazy::new(SharedIncMetricPerDev::new),
             rx_bytes_count: Lazy::new(SharedIncMetricPerDev::new),
+            rx_packets_count: Lazy::new(SharedIncMetricPerDev::new),
+            rx_fails: Lazy::new(SharedIncMetricPerDev::new),
+            rx_count: Lazy::new(SharedIncMetricPerDev::new),
+            tap_read_fails: Lazy::new(SharedIncMetricPerDev::new),
+            tap_write_fails: Lazy::new(SharedIncMetricPerDev::new),
+            tx_bytes_count: Lazy::new(SharedIncMetricPerDev::new),
+            tx_malformed_frames: Lazy::new(SharedIncMetricPerDev::new),
+            tx_fails: Lazy::new(SharedIncMetricPerDev::new),
+            tx_count: Lazy::new(SharedIncMetricPerDev::new),
+            tx_packets_count: Lazy::new(SharedIncMetricPerDev::new),
+            tx_partial_reads: Lazy::new(SharedIncMetricPerDev::new),
+            tx_queue_event_count: Lazy::new(SharedIncMetricPerDev::new),
+            tx_rate_limiter_event_count: Lazy::new(SharedIncMetricPerDev::new),
+            tx_rate_limiter_throttled: Lazy::new(SharedIncMetricPerDev::new),
+            tx_spoofed_mac_count: Lazy::new(SharedIncMetricPerDev::new),
         }
     }
 }
@@ -546,10 +850,6 @@ impl PerDevMetrics for PerDevBlockDeviceMetrics{
                     mapvalue["block"].activate_fails.add(value);
                     mapvalue[dev].activate_fails.add(value);
                 }
-                "rx_bytes_count" => {
-                    mapvalue["block"].read_bytes.add(value);
-                    mapvalue[dev].read_bytes.add(value);
-                },
                 _ => panic!("Unsupported metric"),
             }
         }
