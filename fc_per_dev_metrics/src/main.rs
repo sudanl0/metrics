@@ -1,6 +1,7 @@
 mod metrics;
 mod netdevice;
 use crate::metrics::{METRICS, Metrics, FirecrackerMetrics};
+use crate::metrics::IncMetric;
 use crate::metrics::IncMetricPerDev;
 use crate::netdevice::Net;
 use crate::netdevice::NetDeviceMetricsFns;
@@ -73,10 +74,38 @@ fn test_vsock_metrics(m: &Metrics<FirecrackerMetrics, LineWriter<File>>){
 }
 
 fn test_net_metrics(m: &Metrics<FirecrackerMetrics, LineWriter<File>>){
+    let t0 = SystemTime::now();
+
+    METRICS.net_aggregate.activate_fails.add(10);
+    METRICS.net_aggregate.cfg_fails.add(10);
+    METRICS.net_aggregate.mac_address_updates.add(10);
+    METRICS.net_aggregate.no_rx_avail_buffer.add(10);
+    METRICS.net_aggregate.no_tx_avail_buffer.add(10);
+    METRICS.net_aggregate.event_fails.add(10);
+    METRICS.net_aggregate.rx_queue_event_count.add(10);
+    METRICS.net_aggregate.rx_event_rate_limiter_count.add(10);
+    METRICS.net_aggregate.rx_partial_writes.add(10);
+    METRICS.net_aggregate.rx_rate_limiter_throttled.add(10);
+    METRICS.net_aggregate.rx_tap_event_count.add(10);
+    METRICS.net_aggregate.rx_bytes_count.add(10);
+    METRICS.net_aggregate.rx_packets_count.add(10);
+    METRICS.net_aggregate.rx_fails.add(10);
+    METRICS.net_aggregate.rx_count.add(10);
+    METRICS.net_aggregate.tap_read_fails.add(10);
+    METRICS.net_aggregate.tap_write_fails.add(10);
+    METRICS.net_aggregate.tx_bytes_count.add(10);
+    METRICS.net_aggregate.tx_malformed_frames.add(10);
+    METRICS.net_aggregate.tx_fails.add(10);
+    METRICS.net_aggregate.tx_count.add(10);
+    METRICS.net_aggregate.tx_packets_count.add(10);
+    METRICS.net_aggregate.tx_partial_reads.add(10);
+    METRICS.net_aggregate.tx_queue_event_count.add(10);
+    METRICS.net_aggregate.tx_rate_limiter_event_count.add(10);
+    METRICS.net_aggregate.tx_rate_limiter_throttled.add(10);
+    METRICS.net_aggregate.tx_spoofed_mac_count.add(10);
+// /*
     let net0 = Net::new(String::from("net0"));
     let net1 = Net::new(String::from("net1"));
-    let t0 = SystemTime::now();
-// /*
     net0.metrics.activate_fails_add(10);
     net0.metrics.cfg_fails_add(10);
     net0.metrics.mac_address_updates_add(10);

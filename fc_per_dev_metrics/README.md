@@ -1,5 +1,13 @@
 ## Metrics experiments
 
+```
+debug size with new code: 981K
+debug size without new code: 923K
+
+release size with new code: 590K
+release size without new code: 565K
+```
+
 ```json
 {
   "seccomp": {
