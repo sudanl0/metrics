@@ -7,7 +7,7 @@ use std::sync::{Mutex, OnceLock};
 use once_cell::sync::Lazy;
 use std::collections::BTreeMap;
 use std::cell::Cell;
-use crate::netdevice::get_serialized_metrics;
+use crate::netdevice::{get_serialized_metrics, NetDeviceMetrics};
 
 use serde::{Serialize, Serializer};
 
@@ -237,99 +237,6 @@ impl Serialize for SharedStoreMetric {
     }
 }
 
-/// Block Device associated metrics.
-#[derive(Debug, Default, Serialize)]
-pub struct BlockDeviceMetrics {
-    /// Number of times when activate failed on a network device.
-    pub activate_fails: SharedIncMetric,
-    /// Number of times when interacting with the space config of a network device failed.
-    pub cfg_fails: SharedIncMetric,
-    //// Number of times the mac address was updated through the config space.
-    pub mac_address_updates: SharedIncMetric,
-    /// No available buffer for the net device rx queue.
-    pub no_rx_avail_buffer: SharedIncMetric,
-    /// No available buffer for the net device tx queue.
-    pub no_tx_avail_buffer: SharedIncMetric,
-    /// Number of times when handling events on a network device failed.
-    pub event_fails: SharedIncMetric,
-    /// Number of events associated with the receiving queue.
-    pub rx_queue_event_count: SharedIncMetric,
-    /// Number of events associated with the rate limiter installed on the receiving path.
-    pub rx_event_rate_limiter_count: SharedIncMetric,
-    /// Number of RX partial writes to guest.
-    pub rx_partial_writes: SharedIncMetric,
-    /// Number of RX rate limiter throttling events.
-    pub rx_rate_limiter_throttled: SharedIncMetric,
-    /// Number of events received on the associated tap.
-    pub rx_tap_event_count: SharedIncMetric,
-    /// Number of bytes received.
-    pub rx_bytes_count: SharedIncMetric,
-    /// Number of packets received.
-    pub rx_packets_count: SharedIncMetric,
-    /// Number of errors while receiving data.
-    pub rx_fails: SharedIncMetric,
-    /// Number of successful read operations while receiving data.
-    pub rx_count: SharedIncMetric,
-    /// Number of times reading from TAP failed.
-    pub tap_read_fails: SharedIncMetric,
-    /// Number of times writing to TAP failed.
-    pub tap_write_fails: SharedIncMetric,
-    /// Number of transmitted bytes.
-    pub tx_bytes_count: SharedIncMetric,
-    /// Number of malformed TX frames.
-    pub tx_malformed_frames: SharedIncMetric,
-    /// Number of errors while transmitting data.
-    pub tx_fails: SharedIncMetric,
-    /// Number of successful write operations while transmitting data.
-    pub tx_count: SharedIncMetric,
-    /// Number of transmitted packets.
-    pub tx_packets_count: SharedIncMetric,
-    /// Number of TX partial reads from guest.
-    pub tx_partial_reads: SharedIncMetric,
-    /// Number of events associated with the transmitting queue.
-    pub tx_queue_event_count: SharedIncMetric,
-    /// Number of events associated with the rate limiter installed on the transmitting path.
-    pub tx_rate_limiter_event_count: SharedIncMetric,
-    /// Number of RX rate limiter throttling events.
-    pub tx_rate_limiter_throttled: SharedIncMetric,
-    /// Number of packets with a spoofed mac, sent by the guest.
-    pub tx_spoofed_mac_count: SharedIncMetric,
-}
-impl BlockDeviceMetrics {
-    /// Const default construction.
-    pub const fn new() -> Self {
-        Self {
-            activate_fails: SharedIncMetric::new(),
-            cfg_fails: SharedIncMetric::new(),
-            mac_address_updates: SharedIncMetric::new(),
-            no_rx_avail_buffer: SharedIncMetric::new(),
-            no_tx_avail_buffer: SharedIncMetric::new(),
-            event_fails: SharedIncMetric::new(),
-            rx_queue_event_count: SharedIncMetric::new(),
-            rx_event_rate_limiter_count: SharedIncMetric::new(),
-            rx_partial_writes: SharedIncMetric::new(),
-            rx_rate_limiter_throttled: SharedIncMetric::new(),
-            rx_tap_event_count: SharedIncMetric::new(),
-            rx_bytes_count: SharedIncMetric::new(),
-            rx_packets_count: SharedIncMetric::new(),
-            rx_fails: SharedIncMetric::new(),
-            rx_count: SharedIncMetric::new(),
-            tap_read_fails: SharedIncMetric::new(),
-            tap_write_fails: SharedIncMetric::new(),
-            tx_bytes_count: SharedIncMetric::new(),
-            tx_malformed_frames: SharedIncMetric::new(),
-            tx_fails: SharedIncMetric::new(),
-            tx_count: SharedIncMetric::new(),
-            tx_packets_count: SharedIncMetric::new(),
-            tx_partial_reads: SharedIncMetric::new(),
-            tx_queue_event_count: SharedIncMetric::new(),
-            tx_rate_limiter_event_count: SharedIncMetric::new(),
-            tx_rate_limiter_throttled: SharedIncMetric::new(),
-            tx_spoofed_mac_count: SharedIncMetric::new(),
-        }
-    }
-}
-
 /// Metrics for the seccomp filtering.
 #[derive(Debug, Default, Serialize)]
 pub struct SeccompMetrics {
@@ -461,129 +368,6 @@ pub struct VsockMetrics {
     pub tx_spoofed_mac_count: Lazy<SharedIncMetricPerDev>,
 }
 
-mod as_perdev {
-    use serde::ser::{Serializer, SerializeMap};
-    use serde::Serialize;
-    use crate::metrics::VsockMetrics;
-    use std::collections::BTreeMap;
-    use std::sync::atomic::Ordering;
-    #[derive(Serialize)]
-    struct VsockMetricsSerialized {
-        pub activate_fails: u64,
-        pub cfg_fails: u64,
-        pub mac_address_updates: u64,
-        pub no_rx_avail_buffer: u64,
-        pub no_tx_avail_buffer: u64,
-        pub event_fails: u64,
-        pub rx_queue_event_count: u64,
-        pub rx_event_rate_limiter_count: u64,
-        pub rx_partial_writes: u64,
-        pub rx_rate_limiter_throttled: u64,
-        pub rx_tap_event_count: u64,
-        pub rx_bytes_count: u64,
-        pub rx_packets_count: u64,
-        pub rx_fails: u64,
-        pub rx_count: u64,
-        pub tap_read_fails: u64,
-        pub tap_write_fails: u64,
-        pub tx_bytes_count: u64,
-        pub tx_malformed_frames: u64,
-        pub tx_fails: u64,
-        pub tx_count: u64,
-        pub tx_packets_count: u64,
-        pub tx_partial_reads: u64,
-        pub tx_queue_event_count: u64,
-        pub tx_rate_limiter_event_count: u64,
-        pub tx_rate_limiter_throttled: u64,
-        pub tx_spoofed_mac_count: u64,        
-    }
-    pub fn serialize<S>(base: &VsockMetrics, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut vsockmetric: BTreeMap<String, VsockMetricsSerialized> = BTreeMap::new();
-        let mut binding = base.activate_fails.0.lock().unwrap();
-
-        macro_rules! mymacro {
-            ($cfield:ident) => {
-                let activate_fails_map = binding.get_mut();
-                for (k,v) in activate_fails_map.iter() {
-                    let snapshot = v.0.load(Ordering::Relaxed);
-                    let metr = snapshot as u64 - v.1.load(Ordering::Relaxed) as u64;
-                    v.1.store(snapshot, Ordering::Relaxed);
-                    if vsockmetric.contains_key(k) {
-                        vsockmetric.get_mut(k).unwrap().$cfield = metr;
-                    }else{
-                        vsockmetric.insert(String::from(k), VsockMetricsSerialized{
-                            activate_fails: metr,
-                            cfg_fails: 0,
-                            mac_address_updates: 0,
-                            no_rx_avail_buffer: 0,
-                            no_tx_avail_buffer: 0,
-                            event_fails: 0,
-                            rx_queue_event_count: 0,
-                            rx_event_rate_limiter_count: 0,
-                            rx_partial_writes: 0,
-                            rx_rate_limiter_throttled: 0,
-                            rx_tap_event_count: 0,
-                            rx_bytes_count: 0,
-                            rx_packets_count: 0,
-                            rx_fails: 0,
-                            rx_count: 0,
-                            tap_read_fails: 0,
-                            tap_write_fails: 0,
-                            tx_bytes_count: 0,
-                            tx_malformed_frames: 0,
-                            tx_fails: 0,
-                            tx_count: 0,
-                            tx_packets_count: 0,
-                            tx_partial_reads: 0,
-                            tx_queue_event_count: 0,
-                            tx_rate_limiter_event_count: 0,
-                            tx_rate_limiter_throttled: 0,
-                            tx_spoofed_mac_count: 0,                            
-                        });
-                    }
-                }
-            };
-        }
-        mymacro!(activate_fails);
-        mymacro!(cfg_fails);
-        mymacro!(mac_address_updates);
-        mymacro!(no_rx_avail_buffer);
-        mymacro!(no_tx_avail_buffer);
-        mymacro!(event_fails);
-        mymacro!(rx_queue_event_count);
-        mymacro!(rx_event_rate_limiter_count);
-        mymacro!(rx_partial_writes);
-        mymacro!(rx_rate_limiter_throttled);
-        mymacro!(rx_tap_event_count);
-        mymacro!(rx_bytes_count);
-        mymacro!(rx_packets_count);
-        mymacro!(rx_fails);
-        mymacro!(rx_count);
-        mymacro!(tap_read_fails);
-        mymacro!(tap_write_fails);
-        mymacro!(tx_bytes_count);
-        mymacro!(tx_malformed_frames);
-        mymacro!(tx_fails);
-        mymacro!(tx_count);
-        mymacro!(tx_packets_count);
-        mymacro!(tx_partial_reads);
-        mymacro!(tx_queue_event_count);
-        mymacro!(tx_rate_limiter_event_count);
-        mymacro!(tx_rate_limiter_throttled);
-        mymacro!(tx_spoofed_mac_count);
-        
-        let mut seq = serializer.serialize_map(Some(vsockmetric.len()))?;
-        for (k, v) in vsockmetric.iter() {
-            seq.serialize_entry(k, &v)?;
-        }
-        seq.end()
-    }
-}
-
-
 impl VsockMetrics {
     /// Const default construction.
     pub const fn new() -> Self {
@@ -622,213 +406,6 @@ impl VsockMetrics {
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
-//////////////////////////////////////////////////////////////////////////////////////////
-/////////// BTreeMap in PerDevBlockDeviceMetrics
-//////////////////////////////////////////////////////////////////////////////////////////
-
-/// Trait for adding metrics to a device.
-pub trait PerDevMetrics {
-    type MetricType;
-    fn new() -> Self;
-    fn add(&self, dev: &String, metric: &'static str, value: usize);
-    fn get_metrics(&self) -> &Mutex<Cell<BTreeMap<std::string::String, Self::MetricType>>>;
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-     where S: Serializer, Self::MetricType: Serialize {
-        use serde::ser::SerializeMap;
-        let metrics: &Mutex<Cell<BTreeMap<std::string::String, Self::MetricType>>> = self.get_metrics();
-        if let Ok(mut perdevmetric_cell) = metrics.lock() {
-            let perdevmetricmap = perdevmetric_cell.get_mut();
-            let mut seq = serializer.serialize_map(Some(perdevmetricmap.len()))?;
-            for (k, v) in perdevmetricmap.iter() {
-                seq.serialize_entry(k, v)?;
-            }
-            seq.end()
-        }  else {
-            Err(serde::ser::Error::custom("Failed to lock map"))
-        }
-    }
-}
-
-pub struct PerDevBlockDeviceMetrics {
-    pub metrics: Mutex<Cell<BTreeMap<String, BlockDeviceMetrics>>>,
-}
-
-/// Trait for adding metrics to a device.
-pub trait PerDeviceMetrics {
-    type MetricType;
-    fn new() -> Self;
-    fn add(&self, dev: &String, metric: &'static str, value: usize);
-    fn get_metrics(&self) -> &Mutex<Cell<BTreeMap<std::string::String, Self::MetricType>>>;
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-     where S: Serializer, Self::MetricType: Serialize {
-        use serde::ser::SerializeMap;
-        let metrics: &Mutex<Cell<BTreeMap<std::string::String, Self::MetricType>>> = self.get_metrics();
-        if let Ok(mut perdevmetric_cell) = metrics.lock() {
-            let perdevmetricmap = perdevmetric_cell.get_mut();
-            let mut seq = serializer.serialize_map(Some(perdevmetricmap.len()))?;
-            for (k, v) in perdevmetricmap.iter() {
-                seq.serialize_entry(k, v)?;
-            }
-            seq.end()
-        }  else {
-            Err(serde::ser::Error::custom("Failed to lock map"))
-        }
-    }
-}
-
-impl PerDevMetrics for PerDevBlockDeviceMetrics{
-    type MetricType = BlockDeviceMetrics;
-    fn get_metrics(&self) -> &Mutex<Cell<BTreeMap<std::string::String, Self::MetricType>>> {
-        &self.metrics
-    }
-    fn new() -> Self {
-        Self {
-            metrics: Mutex::new(
-                Cell::new(BTreeMap::from([
-                        (
-                            String::from("block"),
-                            BlockDeviceMetrics::new(),
-                        ),
-                    ]),
-                )
-            )
-        }
-    }
-    fn add(&self, dev: &String, metric: &'static str, value: usize) {
-        if let Ok(mut mapcell) = self.metrics.lock() {
-            let mapvalue = mapcell.get_mut();
-            // println!(">> {:?}", mapvalue);
-            if !mapvalue.contains_key(dev) {
-                // println!("{} already exists", dev);
-            // }  else {
-                mapvalue.insert(dev.to_string(), BlockDeviceMetrics::new());
-                // println!("<<{:?}", value);
-            }
-            match metric {
-                "activate_fails" => {
-                    mapvalue["block"].activate_fails.add(value);
-                    mapvalue[dev].activate_fails.add(value);
-                }
-                "cfg_fails" => {
-                    mapvalue["block"].cfg_fails.add(value);
-                    mapvalue[dev].cfg_fails.add(value);
-                }
-                "mac_address_updates" => {
-                    mapvalue["block"].mac_address_updates.add(value);
-                    mapvalue[dev].mac_address_updates.add(value);
-                }
-                "no_rx_avail_buffer" => {
-                    mapvalue["block"].no_rx_avail_buffer.add(value);
-                    mapvalue[dev].no_rx_avail_buffer.add(value);
-                }
-                "no_tx_avail_buffer" => {
-                    mapvalue["block"].no_tx_avail_buffer.add(value);
-                    mapvalue[dev].no_tx_avail_buffer.add(value);
-                }
-                "event_fails" => {
-                    mapvalue["block"].event_fails.add(value);
-                    mapvalue[dev].event_fails.add(value);
-                }
-                "rx_queue_event_count" => {
-                    mapvalue["block"].rx_queue_event_count.add(value);
-                    mapvalue[dev].rx_queue_event_count.add(value);
-                }
-                "rx_event_rate_limiter_count" => {
-                    mapvalue["block"].rx_event_rate_limiter_count.add(value);
-                    mapvalue[dev].rx_event_rate_limiter_count.add(value);
-                }
-                "rx_partial_writes" => {
-                    mapvalue["block"].rx_partial_writes.add(value);
-                    mapvalue[dev].rx_partial_writes.add(value);
-                }
-                "rx_rate_limiter_throttled" => {
-                    mapvalue["block"].rx_rate_limiter_throttled.add(value);
-                    mapvalue[dev].rx_rate_limiter_throttled.add(value);
-                }
-                "rx_tap_event_count" => {
-                    mapvalue["block"].rx_tap_event_count.add(value);
-                    mapvalue[dev].rx_tap_event_count.add(value);
-                }
-                "rx_bytes_count" => {
-                    mapvalue["block"].rx_bytes_count.add(value);
-                    mapvalue[dev].rx_bytes_count.add(value);
-                }
-                "rx_packets_count" => {
-                    mapvalue["block"].rx_packets_count.add(value);
-                    mapvalue[dev].rx_packets_count.add(value);
-                }
-                "rx_fails" => {
-                    mapvalue["block"].rx_fails.add(value);
-                    mapvalue[dev].rx_fails.add(value);
-                }
-                "rx_count" => {
-                    mapvalue["block"].rx_count.add(value);
-                    mapvalue[dev].rx_count.add(value);
-                }
-                "tap_read_fails" => {
-                    mapvalue["block"].tap_read_fails.add(value);
-                    mapvalue[dev].tap_read_fails.add(value);
-                }
-                "tap_write_fails" => {
-                    mapvalue["block"].tap_write_fails.add(value);
-                    mapvalue[dev].tap_write_fails.add(value);
-                }
-                "tx_bytes_count" => {
-                    mapvalue["block"].tx_bytes_count.add(value);
-                    mapvalue[dev].tx_bytes_count.add(value);
-                }
-                "tx_malformed_frames" => {
-                    mapvalue["block"].tx_malformed_frames.add(value);
-                    mapvalue[dev].tx_malformed_frames.add(value);
-                }
-                "tx_fails" => {
-                    mapvalue["block"].tx_fails.add(value);
-                    mapvalue[dev].tx_fails.add(value);
-                }
-                "tx_count" => {
-                    mapvalue["block"].tx_count.add(value);
-                    mapvalue[dev].tx_count.add(value);
-                }
-                "tx_packets_count" => {
-                    mapvalue["block"].tx_packets_count.add(value);
-                    mapvalue[dev].tx_packets_count.add(value);
-                }
-                "tx_partial_reads" => {
-                    mapvalue["block"].tx_partial_reads.add(value);
-                    mapvalue[dev].tx_partial_reads.add(value);
-                }
-                "tx_queue_event_count" => {
-                    mapvalue["block"].tx_queue_event_count.add(value);
-                    mapvalue[dev].tx_queue_event_count.add(value);
-                }
-                "tx_rate_limiter_event_count" => {
-                    mapvalue["block"].tx_rate_limiter_event_count.add(value);
-                    mapvalue[dev].tx_rate_limiter_event_count.add(value);
-                }
-                "tx_rate_limiter_throttled" => {
-                    mapvalue["block"].tx_rate_limiter_throttled.add(value);
-                    mapvalue[dev].tx_rate_limiter_throttled.add(value);
-                }
-                "tx_spoofed_mac_count" => {
-                    mapvalue["block"].tx_spoofed_mac_count.add(value);
-                    mapvalue[dev].tx_spoofed_mac_count.add(value);
-                }
-                _ => panic!("Unsupported metric"),
-            }
-        }
-    }
-}
-
-impl Debug for PerDevBlockDeviceMetrics {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PerDevBlockDeviceMetrics")
-            .field("map", &self.metrics.lock().unwrap().get_mut())
-            .finish()
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -840,16 +417,10 @@ mod as_net {
     // use serde::ser::SerializeMap;
     use super::*;
 
-    pub fn serialize<S>(_base: &NetMetricsGateway, serializer: S) -> Result<S::Ok, S::Error>
+    pub fn serialize<S>(_base: &NetDeviceMetrics, serializer: S) -> Result<S::Ok, S::Error>
         where
             S: serde::Serializer {
                 get_serialized_metrics(serializer)
-    }
-}
-
-impl NetMetricsGateway {
-    pub const fn new() -> NetMetricsGateway {
-        NetMetricsGateway {}
     }
 }
 
@@ -859,17 +430,12 @@ impl NetMetricsGateway {
 /// Structure storing all metrics while enforcing serialization support on them.
 #[derive(Serialize)]
 pub struct FirecrackerMetrics {
-    // #[serde(flatten, with = "generic_as_perdev")]
-    #[serde(flatten, with = "PerDevBlockDeviceMetrics")]
-    pub block: Lazy<PerDevBlockDeviceMetrics>,
     /// Metrics related to seccomp filtering.
     pub seccomp: SeccompMetrics,
-    // #[serde(flatten)]
-    #[serde(flatten, with = "as_perdev")]
+    #[serde(skip)]
     pub vsock: VsockMetrics,
-    // #[serde(skip)]
     #[serde(flatten, with = "as_net")]
-    pub net: NetMetricsGateway
+    pub net_aggregate: NetDeviceMetrics
 }
 
 impl Default for FirecrackerMetrics {
@@ -881,7 +447,6 @@ impl Default for FirecrackerMetrics {
 impl Debug for FirecrackerMetrics {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FirecrackerMetrics")
-            .field("block", &self.block)
             .field("seccomp", &self.seccomp)
             .finish()
     }
@@ -893,10 +458,9 @@ impl FirecrackerMetrics {
     /// Const default construction.
     pub const fn new() -> Self {
         Self {
-            block: Lazy::new(PerDevBlockDeviceMetrics::new),
             seccomp: SeccompMetrics::new(),
             vsock: VsockMetrics::new(),
-            net: NetMetricsGateway::new(),
+            net_aggregate: NetDeviceMetrics::new(),
         }
     }
 }

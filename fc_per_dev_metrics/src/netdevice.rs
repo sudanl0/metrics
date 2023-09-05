@@ -1,3 +1,4 @@
+use crate::metrics::METRICS;
 use crate::metrics::{SharedIncMetric, IncMetric};
 use serde::{Serialize, ser::SerializeMap};
 use std::sync::MutexGuard;
@@ -19,11 +20,8 @@ fn get_metrics() -> MutexGuard<'static, Vec<NetDeviceMetrics>>{
 impl NetDeviceMetricsBuilder {
     fn new() -> NetMetricsGateway {
         let mut metrics = get_metrics();
-        if metrics.len() == 0 {
-            metrics.push(NetDeviceMetrics::new());
-        }
         metrics.push(NetDeviceMetrics::new());
-        NetMetricsGateway { id: metrics.len() - 2  }
+        NetMetricsGateway { id: metrics.len() - 1 }
     }
 }
 
@@ -32,14 +30,11 @@ pub fn get_serialized_metrics<S>(serializer: S) -> Result<S::Ok, S::Error>
     S: serde::Serializer {
         let dev = "net".to_string();
         let metrics = get_metrics();
-        let mut seq = serializer.serialize_map(Some(metrics.len()))?;
+        let mut seq = serializer.serialize_map(Some(1+metrics.len()))?;
+        seq.serialize_entry("net", &METRICS.net_aggregate)?;
         for i in 0..metrics.len() {
-            if i == 0 {
-                seq.serialize_entry("net", &metrics[i])?;
-            }else{
-                let devn = dev.clone() + &i.to_string();
-                seq.serialize_entry(&devn, &metrics[i])?;
-            }
+            let devn = dev.clone() + &i.to_string();
+            seq.serialize_entry(&devn, &metrics[i])?;
         }
         seq.end()
 }
@@ -104,7 +99,7 @@ pub struct NetDeviceMetrics {
 }
 impl NetDeviceMetrics {
     /// Const default construction.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             activate_fails: SharedIncMetric::new(),
             cfg_fails: SharedIncMetric::new(),
@@ -173,8 +168,8 @@ macro_rules! metrics_add {
             // Defines a const called `QRST`.
             fn [<$name _add>](&self, n: usize) {
                 let metrics = get_metrics();
-                metrics[self.id+1].$name.add(n);
-                metrics[0].$name.add(n);
+                metrics[self.id].$name.add(n);
+                METRICS.net_aggregate.$name.add(n);
             }
         }
     }

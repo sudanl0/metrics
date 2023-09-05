@@ -2,76 +2,11 @@ mod metrics;
 mod netdevice;
 use crate::metrics::{METRICS, Metrics, FirecrackerMetrics};
 use crate::metrics::IncMetricPerDev;
-use crate::metrics::PerDevMetrics;
 use crate::netdevice::Net;
 use crate::netdevice::NetDeviceMetricsFns;
 use std::time::SystemTime;
 use std::io::LineWriter;
 use std::fs::File;
-
-fn test_block_metrics(m: &Metrics<FirecrackerMetrics, LineWriter<File>>){
-    let t0 = SystemTime::now();
-    METRICS.block.add(&String::from("block0"), "activate_fails", 10);
-    METRICS.block.add(&String::from("block0"), "cfg_fails", 10);
-    METRICS.block.add(&String::from("block0"), "mac_address_updates", 10);
-    METRICS.block.add(&String::from("block0"), "no_rx_avail_buffer", 10);
-    METRICS.block.add(&String::from("block0"), "no_tx_avail_buffer", 10);
-    METRICS.block.add(&String::from("block0"), "event_fails", 10);
-    METRICS.block.add(&String::from("block0"), "rx_queue_event_count", 10);
-    METRICS.block.add(&String::from("block0"), "rx_event_rate_limiter_count", 10);
-    METRICS.block.add(&String::from("block0"), "rx_partial_writes", 10);
-    METRICS.block.add(&String::from("block0"), "rx_rate_limiter_throttled", 10);
-    METRICS.block.add(&String::from("block0"), "rx_tap_event_count", 10);
-    METRICS.block.add(&String::from("block0"), "rx_bytes_count", 10);
-    METRICS.block.add(&String::from("block0"), "rx_packets_count", 10);
-    METRICS.block.add(&String::from("block0"), "rx_fails", 10);
-    METRICS.block.add(&String::from("block0"), "rx_count", 10);
-    METRICS.block.add(&String::from("block0"), "tap_read_fails", 10);
-    METRICS.block.add(&String::from("block0"), "tap_write_fails", 10);
-    METRICS.block.add(&String::from("block0"), "tx_bytes_count", 10);
-    METRICS.block.add(&String::from("block0"), "tx_malformed_frames", 10);
-    METRICS.block.add(&String::from("block0"), "tx_fails", 10);
-    METRICS.block.add(&String::from("block0"), "tx_count", 10);
-    METRICS.block.add(&String::from("block0"), "tx_packets_count", 10);
-    METRICS.block.add(&String::from("block0"), "tx_partial_reads", 10);
-    METRICS.block.add(&String::from("block0"), "tx_queue_event_count", 10);
-    METRICS.block.add(&String::from("block0"), "tx_rate_limiter_event_count", 10);
-    METRICS.block.add(&String::from("block0"), "tx_rate_limiter_throttled", 10);
-    METRICS.block.add(&String::from("block0"), "tx_spoofed_mac_count", 10);
-    METRICS.block.add(&String::from("block1"), "activate_fails", 10);
-    METRICS.block.add(&String::from("block1"), "cfg_fails", 10);
-    METRICS.block.add(&String::from("block1"), "mac_address_updates", 10);
-    METRICS.block.add(&String::from("block1"), "no_rx_avail_buffer", 10);
-    METRICS.block.add(&String::from("block1"), "no_tx_avail_buffer", 10);
-    METRICS.block.add(&String::from("block1"), "event_fails", 10);
-    METRICS.block.add(&String::from("block1"), "rx_queue_event_count", 10);
-    METRICS.block.add(&String::from("block1"), "rx_event_rate_limiter_count", 10);
-    METRICS.block.add(&String::from("block1"), "rx_partial_writes", 10);
-    METRICS.block.add(&String::from("block1"), "rx_rate_limiter_throttled", 10);
-    METRICS.block.add(&String::from("block1"), "rx_tap_event_count", 10);
-    METRICS.block.add(&String::from("block1"), "rx_bytes_count", 10);
-    METRICS.block.add(&String::from("block1"), "rx_packets_count", 10);
-    METRICS.block.add(&String::from("block1"), "rx_fails", 10);
-    METRICS.block.add(&String::from("block1"), "rx_count", 10);
-    METRICS.block.add(&String::from("block1"), "tap_read_fails", 10);
-    METRICS.block.add(&String::from("block1"), "tap_write_fails", 10);
-    METRICS.block.add(&String::from("block1"), "tx_bytes_count", 10);
-    METRICS.block.add(&String::from("block1"), "tx_malformed_frames", 10);
-    METRICS.block.add(&String::from("block1"), "tx_fails", 10);
-    METRICS.block.add(&String::from("block1"), "tx_count", 10);
-    METRICS.block.add(&String::from("block1"), "tx_packets_count", 10);
-    METRICS.block.add(&String::from("block1"), "tx_partial_reads", 10);
-    METRICS.block.add(&String::from("block1"), "tx_queue_event_count", 10);
-    METRICS.block.add(&String::from("block1"), "tx_rate_limiter_event_count", 10);
-    METRICS.block.add(&String::from("block1"), "tx_rate_limiter_throttled", 10);
-    METRICS.block.add(&String::from("block1"), "tx_spoofed_mac_count", 10);
-    let t1 = SystemTime::now();
-    println!("Time take to update metrics when BTreeMap is part of PerDevMetrics in FcMetrics: {:?}", t1.duration_since(t0).unwrap());
-    let t0 = SystemTime::now();
-    assert!(m.write().is_ok());
-    let t1 = SystemTime::now();
-    println!("Time take to flush metrics when BTreeMap is part of PerDevMetrics in FcMetrics: {:?}", t1.duration_since(t0).unwrap());
-}
 
 fn test_vsock_metrics(m: &Metrics<FirecrackerMetrics, LineWriter<File>>){
     let t0 = SystemTime::now();
@@ -216,11 +151,6 @@ fn main(){
     assert!(m.write().is_ok());
 
     //////////////////////////////////////////////////////////////////////////////////////////
-    /////////// BTreeMap in PerDevBlockDeviceMetrics
-    //////////////////////////////////////////////////////////////////////////////////////////
-
-    test_block_metrics(m);
-    //////////////////////////////////////////////////////////////////////////////////////////
     /////////// BTreeMap in SharedIncMetricPerDev
     //////////////////////////////////////////////////////////////////////////////////////////
 
@@ -235,23 +165,10 @@ fn main(){
 
 #[cfg(test)]
 mod tests {
-    use crate::metrics::{METRICS, METRICS1, METRICS3};
-    use crate::{test_block_metrics, test_vsock_metrics, test_net_metrics};
+    use crate::metrics::{METRICS1, METRICS3};
+    use crate::{test_vsock_metrics, test_net_metrics};
     use std::io::LineWriter;
     use std::fs::File;
-    
-    #[test]
-    fn test_block_metrics_proposal() {
-        let m = &METRICS;
-        let res = m.write();
-        assert!(res.is_ok() && !res.unwrap());
-        
-        let f = File::create("./block_metrics.json").expect("Failed to create temporary metrics file");
-        assert!(m.init(LineWriter::new(f)).is_ok());
-        assert!(m.write().is_ok());
-
-        test_block_metrics(m);
-    }
 
     #[test]
     fn test_vsock_metrics_proposal() {
