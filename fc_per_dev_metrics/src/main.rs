@@ -103,6 +103,12 @@ fn test_net_metrics(m: &Metrics<FirecrackerMetrics, LineWriter<File>>){
     METRICS.net_aggregate.tx_rate_limiter_event_count.add(10);
     METRICS.net_aggregate.tx_rate_limiter_throttled.add(10);
     METRICS.net_aggregate.tx_spoofed_mac_count.add(10);
+    let t1 = SystemTime::now();
+    println!("Time take to update metrics when they are part of Net: {:?}", t1.duration_since(t0).unwrap());
+    assert!(m.write().is_ok());
+    let t0 = SystemTime::now();
+    let t1 = SystemTime::now();
+    println!("Time take to flush metrics when they are part of Net: {:?}", t1.duration_since(t0).unwrap());
 // /*
     let net0 = Net::new(String::from("net0"));
     let net1 = Net::new(String::from("net1"));
