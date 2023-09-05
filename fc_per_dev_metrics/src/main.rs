@@ -4,7 +4,7 @@ use crate::metrics::{METRICS, Metrics, FirecrackerMetrics};
 use crate::metrics::IncMetricPerDev;
 use crate::metrics::PerDevMetrics;
 use crate::netdevice::Net;
-use crate::netdevice::{flush_net_metrics, NetDeviceMetricsFns};
+use crate::netdevice::NetDeviceMetricsFns;
 use std::time::SystemTime;
 use std::io::LineWriter;
 use std::fs::File;
@@ -141,6 +141,7 @@ fn test_net_metrics(m: &Metrics<FirecrackerMetrics, LineWriter<File>>){
     let net0 = Net::new(String::from("net0"));
     let net1 = Net::new(String::from("net1"));
     let t0 = SystemTime::now();
+// /*
     net0.metrics.activate_fails_add(10);
     net0.metrics.cfg_fails_add(10);
     net0.metrics.mac_address_updates_add(10);
@@ -195,31 +196,11 @@ fn test_net_metrics(m: &Metrics<FirecrackerMetrics, LineWriter<File>>){
     net1.metrics.tx_rate_limiter_event_count_add(10);
     net1.metrics.tx_rate_limiter_throttled_add(10);
     net1.metrics.tx_spoofed_mac_count_add(10);
+// */
     let t1 = SystemTime::now();
     println!("Time take to update metrics when they are part of Net: {:?}", t1.duration_since(t0).unwrap());
     assert!(m.write().is_ok());
     let t0 = SystemTime::now();
-    flush_net_metrics(m);
-    net0.metrics.flush_metrics(m);
-    net1.metrics.flush_metrics(m);
-    // match serde_json::to_string_pretty(&net){
-    //     Ok(net_metrics_serbuf) => {
-    //         assert!(m.write_devmetrics(net_metrics_serbuf).is_ok());
-    //     }
-    //     Err(err) => println!("{}", err.to_string())
-    // }
-    // match serde_json::to_string_pretty(&net0){
-    //     Ok(net_metrics_serbuf) => {
-    //         assert!(m.write_devmetrics(net_metrics_serbuf).is_ok());
-    //     }
-    //     Err(err) => println!("{}", err.to_string())
-    // }
-    // match serde_json::to_string_pretty(&net1){
-    //     Ok(net_metrics_serbuf) => {
-    //         assert!(m.write_devmetrics(net_metrics_serbuf).is_ok());
-    //     }
-    //     Err(err) => println!("{}", err.to_string())
-    // }
     let t1 = SystemTime::now();
     println!("Time take to flush metrics when they are part of Net: {:?}", t1.duration_since(t0).unwrap());
 }

@@ -1,18 +1,47 @@
-use crate::metrics::{Metrics, FirecrackerMetrics, SharedIncMetric, IncMetric};
-use std::io::LineWriter;
-use std::fs::File;
+use crate::metrics::{SharedIncMetric, IncMetric};
 use serde::{Serialize, ser::SerializeMap};
+use std::sync::MutexGuard;
+use std::sync::Mutex;
 use paste::paste;
 
-static NET: NetDeviceMetrics = NetDeviceMetrics::new();
+struct NetDeviceMetricsBuilder {
+    metrics: Mutex<Vec<NetDeviceMetrics>>,
+}
+static NET_DEV_METRICS_PVT: NetDeviceMetricsBuilder = NetDeviceMetricsBuilder {
+    metrics: Mutex::new(Vec::new()),
+};
 
-pub fn flush_net_metrics(metric_writer: &Metrics<FirecrackerMetrics, LineWriter<File>>) {
-    match serde_json::to_string_pretty(&NET){
-        Ok(net_metrics_serbuf) => {
-            assert!(metric_writer.write_devmetrics(net_metrics_serbuf).is_ok());
+fn get_metrics() -> MutexGuard<'static, Vec<NetDeviceMetrics>>{
+    let metrics = NET_DEV_METRICS_PVT.metrics.lock().unwrap();
+    metrics
+}
+
+impl NetDeviceMetricsBuilder {
+    fn new() -> NetMetricsGateway {
+        let mut metrics = get_metrics();
+        if metrics.len() == 0 {
+            metrics.push(NetDeviceMetrics::new());
         }
-        Err(err) => println!("{}", err.to_string())
+        metrics.push(NetDeviceMetrics::new());
+        NetMetricsGateway { id: metrics.len() - 2  }
     }
+}
+
+pub fn get_serialized_metrics<S>(serializer: S) -> Result<S::Ok, S::Error>
+    where
+    S: serde::Serializer {
+        let dev = "net".to_string();
+        let metrics = get_metrics();
+        let mut seq = serializer.serialize_map(Some(metrics.len()))?;
+        for i in 0..metrics.len() {
+            if i == 0 {
+                seq.serialize_entry("net", &metrics[i])?;
+            }else{
+                let devn = dev.clone() + &i.to_string();
+                seq.serialize_entry(&devn, &metrics[i])?;
+            }
+        }
+        seq.end()
 }
 
 /// Network-related metrics.
@@ -75,7 +104,7 @@ pub struct NetDeviceMetrics {
 }
 impl NetDeviceMetrics {
     /// Const default construction.
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             activate_fails: SharedIncMetric::new(),
             cfg_fails: SharedIncMetric::new(),
@@ -136,7 +165,6 @@ pub trait NetDeviceMetricsFns {
     fn tx_rate_limiter_event_count_add(&self, n: usize);
     fn tx_rate_limiter_throttled_add(&self, n: usize);
     fn tx_spoofed_mac_count_add(&self, n: usize);
-    fn flush_metrics(&self, metric_writer: &Metrics<FirecrackerMetrics, LineWriter<File>>);
 }
 
 macro_rules! metrics_add {
@@ -144,14 +172,20 @@ macro_rules! metrics_add {
         paste! {
             // Defines a const called `QRST`.
             fn [<$name _add>](&self, n: usize) {
-                self.$name.add(n);
-                NET.$name.add(n);
+                let metrics = get_metrics();
+                metrics[self.id+1].$name.add(n);
+                metrics[0].$name.add(n);
             }
         }
     }
 }
 
-impl NetDeviceMetricsFns for NetDeviceMetrics {
+#[derive(Debug)]
+pub struct NetMetricsGateway{
+    pub(crate) id: usize,
+}
+
+impl NetDeviceMetricsFns for NetMetricsGateway {
     metrics_add!(activate_fails);
     metrics_add!(cfg_fails);
     metrics_add!(mac_address_updates);
@@ -179,40 +213,19 @@ impl NetDeviceMetricsFns for NetDeviceMetrics {
     metrics_add!(tx_rate_limiter_event_count);
     metrics_add!(tx_rate_limiter_throttled);
     metrics_add!(tx_spoofed_mac_count);
-    fn flush_metrics(&self, metric_writer: &Metrics<FirecrackerMetrics, LineWriter<File>>) {
-        match serde_json::to_string_pretty(&NET){
-            Ok(net_metrics_serbuf) => {
-                assert!(metric_writer.write_devmetrics(net_metrics_serbuf).is_ok());
-            }
-            Err(err) => println!("{}", err.to_string())
-        }
-    }    
 }
 
-// #[derive(Debug, Serialize)]
-// #[serde(deny_unknown_fields)]
 pub struct Net{
+    #[allow(dead_code)]
     pub(crate) id: String,
-    pub(crate) metrics: NetDeviceMetrics,
-}
-
-impl Serialize for Net{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer {
-        let dev = self.id.clone();
-        let mut seq = serializer.serialize_map(Some(1))?;
-        // println!(">>{:?}", dev);
-        seq.serialize_entry(&dev, &self.metrics)?;
-        seq.end()
-    }
+    pub(crate) metrics: NetMetricsGateway,
 }
 
 impl Net{
     pub fn new(id: String) -> Net{
         Net{
-            id,
-            metrics: NetDeviceMetrics::new()
+            id: id,
+            metrics: NetDeviceMetricsBuilder::new()
         }
     }
 }

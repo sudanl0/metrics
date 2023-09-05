@@ -7,6 +7,7 @@ use std::sync::{Mutex, OnceLock};
 use once_cell::sync::Lazy;
 use std::collections::BTreeMap;
 use std::cell::Cell;
+use crate::netdevice::get_serialized_metrics;
 
 use serde::{Serialize, Serializer};
 
@@ -103,31 +104,6 @@ impl<T: Serialize + Debug, M: Write + Send + Debug> Metrics<T, M> {
                     }
                 }
                 Err(err) => Err(MetricsError::Serde(err.to_string())),
-            }
-        } else {
-            // If the metrics are not initialized, no error is thrown but we do let the user know
-            // that metrics were not written.
-            Ok(false)
-        }
-    }
-    pub fn write_devmetrics(&self, perdevmetrics: String) -> Result<bool, MetricsError> {
-        if let Some(lock) = self.metrics_buf.get() {
-            if let Ok(mut guard) = lock.lock() {
-                // No need to explicitly call flush because the underlying LineWriter
-                // flushes automatically whenever a newline is
-                // detected (and we always end with a newline the
-                // current write).
-                guard
-                    .write_all(format!("{perdevmetrics}\n",).as_bytes())
-                    .map_err(MetricsError::Write)
-                    .map(|_| true)
-            } else {
-                // We have not incremented `missed_metrics_count` as there is no way to push
-                // metrics if destination lock got poisoned.
-                panic!(
-                    "Failed to write to the provided metrics destination due to poisoned \
-                        lock"
-                );
             }
         } else {
             // If the metrics are not initialized, no error is thrown but we do let the user know
@@ -677,52 +653,28 @@ pub struct PerDevBlockDeviceMetrics {
     pub metrics: Mutex<Cell<BTreeMap<String, BlockDeviceMetrics>>>,
 }
 
-// pub struct PerDevNetDeviceMetrics {
-//     pub metrics: Mutex<Cell<BTreeMap<String, NetDeviceMetrics>>>,
-// }
-
-// impl PerDevMetrics for PerDevNetDeviceMetrics{
-//     type MetricType = NetDeviceMetrics;
-//     fn get_metrics(&self) -> &Mutex<Cell<BTreeMap<std::string::String, Self::MetricType>>> {
-//         &self.metrics
-//     }
-//     fn new() -> Self {
-//         Self {
-//             metrics: Mutex::new(
-//                 Cell::new(BTreeMap::from([
-//                         (
-//                             String::from("net"),
-//                             NetDeviceMetrics::new(),
-//                         ),
-//                     ]),
-//                 )
-//             )
-//         }
-//     }
-//     fn add(&self, dev: &String, metric: &'static str, value: usize) {
-//         if let Ok(mut mapcell) = self.metrics.lock() {
-//             let mapvalue = mapcell.get_mut();
-//             // println!(">> {:?}", mapvalue);
-//             if mapvalue.contains_key(dev) {
-//                 println!("{} already exists", dev);
-//             }  else {
-//                 mapvalue.insert(String::from(dev), NetDeviceMetrics::new());
-//                 // println!("<<{:?}", value);
-//             }
-//             match metric {
-//                 "activate_fails" => {
-//                     mapvalue["net"].activate_fails.add(value);
-//                     mapvalue[dev].activate_fails.add(value);
-//                 }
-//                 "rx_bytes_count" => {
-//                     mapvalue["net"].rx_bytes_count.add(value);
-//                     mapvalue[dev].rx_bytes_count.add(value);
-//                 },
-//                 _ => panic!("Unsupported metric"),
-//             }
-//         }
-//     }
-// }
+/// Trait for adding metrics to a device.
+pub trait PerDeviceMetrics {
+    type MetricType;
+    fn new() -> Self;
+    fn add(&self, dev: &String, metric: &'static str, value: usize);
+    fn get_metrics(&self) -> &Mutex<Cell<BTreeMap<std::string::String, Self::MetricType>>>;
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+     where S: Serializer, Self::MetricType: Serialize {
+        use serde::ser::SerializeMap;
+        let metrics: &Mutex<Cell<BTreeMap<std::string::String, Self::MetricType>>> = self.get_metrics();
+        if let Ok(mut perdevmetric_cell) = metrics.lock() {
+            let perdevmetricmap = perdevmetric_cell.get_mut();
+            let mut seq = serializer.serialize_map(Some(perdevmetricmap.len()))?;
+            for (k, v) in perdevmetricmap.iter() {
+                seq.serialize_entry(k, v)?;
+            }
+            seq.end()
+        }  else {
+            Err(serde::ser::Error::custom("Failed to lock map"))
+        }
+    }
+}
 
 impl PerDevMetrics for PerDevBlockDeviceMetrics{
     type MetricType = BlockDeviceMetrics;
@@ -867,19 +819,37 @@ impl PerDevMetrics for PerDevBlockDeviceMetrics{
     }
 }
 
-// impl Debug for PerDevNetDeviceMetrics {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.debug_struct("PerDevNetDeviceMetrics")
-//             .field("map", &self.metrics.lock().unwrap().get_mut())
-//             .finish()
-//     }
-// }
-
 impl Debug for PerDevBlockDeviceMetrics {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PerDevBlockDeviceMetrics")
             .field("map", &self.metrics.lock().unwrap().get_mut())
             .finish()
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Debug)]
+pub struct NetMetricsGateway{}
+
+mod as_net {
+    // use serde::ser::SerializeMap;
+    use super::*;
+
+    pub fn serialize<S>(_base: &NetMetricsGateway, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer {
+                get_serialized_metrics(serializer)
+    }
+}
+
+impl NetMetricsGateway {
+    pub const fn new() -> NetMetricsGateway {
+        NetMetricsGateway {}
     }
 }
 
@@ -897,6 +867,9 @@ pub struct FirecrackerMetrics {
     // #[serde(flatten)]
     #[serde(flatten, with = "as_perdev")]
     pub vsock: VsockMetrics,
+    // #[serde(skip)]
+    #[serde(flatten, with = "as_net")]
+    pub net: NetMetricsGateway
 }
 
 impl Default for FirecrackerMetrics {
@@ -923,6 +896,7 @@ impl FirecrackerMetrics {
             block: Lazy::new(PerDevBlockDeviceMetrics::new),
             seccomp: SeccompMetrics::new(),
             vsock: VsockMetrics::new(),
+            net: NetMetricsGateway::new(),
         }
     }
 }
