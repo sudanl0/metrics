@@ -30,13 +30,25 @@ pub fn get_serialized_metrics<S>(serializer: S) -> Result<S::Ok, S::Error>
     S: serde::Serializer {
         let dev = "net".to_string();
         let metrics = get_metrics();
-        let mut seq = serializer.serialize_map(Some(1+metrics.len()))?;
-        seq.serialize_entry("net", &METRICS.net_aggregate)?;
-        for i in 0..metrics.len() {
-            let devn = dev.clone() + &i.to_string();
-            seq.serialize_entry(&devn, &metrics[i])?;
+        if 0 == metrics.len() {
+            let mut seq = serializer.serialize_map(Some(2))?;
+            match serde_json::to_value(&METRICS.net_aggregate){
+                Ok(net_metrics_serbuf) => {
+                    seq.serialize_entry("net", &net_metrics_serbuf)?;
+                    seq.serialize_entry("net0", &net_metrics_serbuf)?;
+                }
+                Err(err) => println!("{}", err.to_string())
+            }
+            seq.end()
+        }else{
+            let mut seq = serializer.serialize_map(Some(1+metrics.len()))?;
+            seq.serialize_entry("net", &METRICS.net_aggregate)?;
+            for i in 0..metrics.len() {
+                let devn = dev.clone() + &i.to_string();
+                seq.serialize_entry(&devn, &metrics[i])?;
+            }
+            seq.end()
         }
-        seq.end()
 }
 
 /// Network-related metrics.
