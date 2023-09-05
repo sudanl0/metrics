@@ -48,6 +48,40 @@ release size without new code: 565K
     "num_faults": 0
   },
   "net": {
+    "activate_fails": 10,
+    "cfg_fails": 10,
+    "mac_address_updates": 10,
+    "no_rx_avail_buffer": 10,
+    "no_tx_avail_buffer": 10,
+    "event_fails": 10,
+    "rx_queue_event_count": 10,
+    "rx_event_rate_limiter_count": 10,
+    "rx_partial_writes": 10,
+    "rx_rate_limiter_throttled": 10,
+    "rx_tap_event_count": 10,
+    "rx_bytes_count": 10,
+    "rx_packets_count": 10,
+    "rx_fails": 10,
+    "rx_count": 10,
+    "tap_read_fails": 10,
+    "tap_write_fails": 10,
+    "tx_bytes_count": 10,
+    "tx_malformed_frames": 10,
+    "tx_fails": 10,
+    "tx_count": 10,
+    "tx_packets_count": 10,
+    "tx_partial_reads": 10,
+    "tx_queue_event_count": 10,
+    "tx_rate_limiter_event_count": 10,
+    "tx_rate_limiter_throttled": 10,
+    "tx_spoofed_mac_count": 10
+  }
+}
+{
+  "seccomp": {
+    "num_faults": 0
+  },
+  "net": {
     "activate_fails": 20,
     "cfg_fails": 20,
     "mac_address_updates": 20,
