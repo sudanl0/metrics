@@ -7,7 +7,8 @@ use std::sync::{Mutex, OnceLock};
 use once_cell::sync::Lazy;
 use std::collections::BTreeMap;
 use std::cell::Cell;
-use crate::netdevice::{get_serialized_metrics, NetDeviceMetrics};
+use crate::netdevice::{get_serialized_metrics, net_activate_fails};
+// use crate::netdevice::{get_serialized_metrics, NetDeviceMetrics};
 
 use serde::{Serialize, Serializer};
 
@@ -144,6 +145,7 @@ pub enum MetricsError {
 pub trait IncMetric {
     /// Adds `value` to the current counter.
     fn add(&self, value: usize);
+    fn get(&self) -> usize;
     /// Increments by 1 unit the current counter.
     fn inc(&self) {
         self.add(1);
@@ -198,6 +200,11 @@ impl IncMetric for SharedIncMetric {
     // TODO: would a stronger ordering make a difference here?
     fn add(&self, value: usize) {
         self.0.fetch_add(value, Ordering::Relaxed);
+    }
+
+    fn get(&self) -> usize {
+        let res = self.0.load(Ordering::Relaxed) - self.1.load(Ordering::Relaxed);
+        res
     }
 
     fn count(&self) -> usize {
@@ -410,19 +417,43 @@ impl VsockMetrics {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-mod as_net {
-    // use serde::ser::SerializeMap;
-    use super::*;
+// mod as_net {
+//     // use serde::ser::SerializeMap;
+//     use super::*;
 
-    pub fn serialize<S>(_base: &NetDeviceMetrics, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer {
-                get_serialized_metrics(serializer)
+//     pub fn serialize<S>(serializer: S) -> Result<S::Ok, S::Error>
+//         where
+//             S: serde::Serializer {
+//                 get_serialized_metrics(serializer)
+//     }
+// }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+pub trait DeviceActivatefails{
+    fn activate_fails(&self);
+}
+
+#[derive(Default)]
+pub struct NetDeviceMetricsDummmy{}
+impl NetDeviceMetricsDummmy{
+    pub const fn new() -> Self{
+        Self{}
     }
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////
+impl DeviceActivatefails for NetDeviceMetricsDummmy{
+    fn activate_fails(&self) {
+        net_activate_fails();
+    }
+}
+impl Serialize for NetDeviceMetricsDummmy{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer {
+                get_serialized_metrics(serializer)
+    }
+}
 
 /// Structure storing all metrics while enforcing serialization support on them.
 #[derive(Serialize)]
@@ -431,8 +462,11 @@ pub struct FirecrackerMetrics {
     pub seccomp: SeccompMetrics,
     #[serde(skip)]
     pub vsock: VsockMetrics,
-    #[serde(flatten, with = "as_net")]
-    pub net_aggregate: NetDeviceMetrics
+    // #[serde(flatten, with = "as_net")]
+    #[serde(flatten)]
+    pub net: NetDeviceMetricsDummmy,
+    // pub net_aggregate1: NetDeviceMetrics,
+    // pub net_aggregate2: NetDeviceMetrics,
 }
 
 impl Default for FirecrackerMetrics {
@@ -457,7 +491,9 @@ impl FirecrackerMetrics {
         Self {
             seccomp: SeccompMetrics::new(),
             vsock: VsockMetrics::new(),
-            net_aggregate: NetDeviceMetrics::new(),
+            net: NetDeviceMetricsDummmy::new(),
+            // net_aggregate1: NetDeviceMetrics::new(),
+            // net_aggregate2: NetDeviceMetrics::new(),
         }
     }
 }
