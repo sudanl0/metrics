@@ -4,11 +4,8 @@ use std::io::Write;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
-use once_cell::sync::Lazy;
-use std::collections::BTreeMap;
-use std::cell::Cell;
-use crate::netdevice::{get_serialized_metrics, net_activate_fails};
-// use crate::netdevice::{get_serialized_metrics, NetDeviceMetrics};
+use crate::netdevice::NetDeviceMetricsHelper;
+use crate::netdevice::NetDeviceMetrics;
 
 use serde::{Serialize, Serializer};
 
@@ -18,11 +15,8 @@ pub type FcLineWriter = std::io::LineWriter<std::fs::File>;
 pub static METRICS: Metrics<FirecrackerMetrics, FcLineWriter> =
     Metrics::<FirecrackerMetrics, FcLineWriter>::new(FirecrackerMetrics::new());
 #[allow(unused)]
-pub static METRICS1: Metrics<FirecrackerMetrics, FcLineWriter> =
-    Metrics::<FirecrackerMetrics, FcLineWriter>::new(FirecrackerMetrics::new());
-#[allow(unused)]
-pub static METRICS3: Metrics<FirecrackerMetrics, FcLineWriter> =
-    Metrics::<FirecrackerMetrics, FcLineWriter>::new(FirecrackerMetrics::new());
+pub static METRICSDUMMY: Metrics<FirecrackerMetricsDummy, FcLineWriter> =
+    Metrics::<FirecrackerMetricsDummy, FcLineWriter>::new(FirecrackerMetricsDummy::new());
 
 /// Metrics system.
 // All member fields have types which are Sync, and exhibit interior mutability, so
@@ -145,13 +139,14 @@ pub enum MetricsError {
 pub trait IncMetric {
     /// Adds `value` to the current counter.
     fn add(&self, value: usize);
-    fn get(&self) -> usize;
     /// Increments by 1 unit the current counter.
     fn inc(&self) {
         self.add(1);
     }
     /// Returns current value of the counter.
     fn count(&self) -> usize;
+    /// Returns diff of current and old value of the counter.
+    fn fetch_diff(&self) -> usize;
 }
 
 /// Used for defining new types of metrics that do not need a counter and act as a persistent
@@ -186,12 +181,6 @@ impl SharedIncMetric {
 /// from more than one thread, so more synchronization is necessary.
 #[derive(Debug, Default)]
 pub struct SharedStoreMetric(AtomicUsize);
-impl SharedStoreMetric {
-    /// Const default construction.
-    pub const fn new() -> Self {
-        Self(AtomicUsize::new(0))
-    }
-}
 
 impl IncMetric for SharedIncMetric {
     // While the order specified for this operation is still Relaxed, the actual instruction will
@@ -202,13 +191,13 @@ impl IncMetric for SharedIncMetric {
         self.0.fetch_add(value, Ordering::Relaxed);
     }
 
-    fn get(&self) -> usize {
-        let res = self.0.load(Ordering::Relaxed) - self.1.load(Ordering::Relaxed);
-        res
-    }
-
     fn count(&self) -> usize {
         self.0.load(Ordering::Relaxed)
+    }
+
+    fn fetch_diff(&self) -> usize {
+        let res = self.0.load(Ordering::Relaxed) - self.1.load(Ordering::Relaxed);
+        res
     }
 }
 
@@ -244,197 +233,21 @@ impl Serialize for SharedStoreMetric {
     }
 }
 
-/// Metrics for the seccomp filtering.
-#[derive(Debug, Default, Serialize)]
-pub struct SeccompMetrics {
-    /// Number of errors inside the seccomp filtering.
-    pub num_faults: SharedStoreMetric,
-}
-impl SeccompMetrics {
-    /// Const default construction.
-    pub const fn new() -> Self {
-        Self {
-            num_faults: SharedStoreMetric::new(),
-        }
-    }
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+/// Trait to be implemented by all devices having metrics that need to be tracked.
+pub trait PerDeviceMetricsHelper{
+    /// to report failure in activation of a device
+    fn activate_fails();
+    // /// each device implements this function to serialize its metrics
+    fn serialize_metrics<S:Serializer>(serializer: S) -> Result<S::Ok, S::Error>;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-/////////// BTreeMap in SharedIncMetricPerDev
-//////////////////////////////////////////////////////////////////////////////////////////
-pub trait IncMetricPerDev {
-    /// Adds `value` to the current counter.
-    fn add(&self, dev: &String, value: usize);
-}
-
-#[derive(Default)]
-pub struct SharedIncMetricPerDev(Mutex<Cell<BTreeMap<String, (AtomicUsize,AtomicUsize)>>>);
-
-impl SharedIncMetricPerDev {
-    /// Const default construction.
-    pub fn new() -> Self {
-        Self {
-            0: Mutex::new(
-                Cell::new(BTreeMap::from([
-                            (
-                                String::from("vsock"),
-                                (AtomicUsize::new(0), AtomicUsize::new(0)),
-                            ),])
-                )
-            ),
-        }
-    }
-}
-
-impl Debug for SharedIncMetricPerDev {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SharedIncMetricPerDev")
-            .field("0", &self.0.lock().unwrap().get_mut())
-            .finish()
-    }
-}
-
-impl IncMetricPerDev for SharedIncMetricPerDev {
-    // While the order specified for this operation is still Relaxed, the actual instruction will
-    // be an asm "LOCK; something" and thus atomic across multiple threads, simply because of the
-    // fetch_and_add (as opposed to "store(load() + 1)") implementation for atomics.
-    // TODO: would a stronger ordering make a difference here?
-    fn add(&self, dev:&String, value: usize) {
-        if let Ok(mut mapcell) = self.0.lock() {
-            let mapvalue = mapcell.get_mut();
-            // println!(">> {:?}", mapvalue);
-            if mapvalue.contains_key(dev) {
-                println!("{} already exists", dev);
-            }  else {
-                mapvalue.insert(String::from(dev), (AtomicUsize::new(0),AtomicUsize::new(0)));
-                // println!("<<{:?}", value);
-            }
-            mapvalue[dev].0.fetch_add(value, Ordering::Relaxed);
-            mapvalue["vsock"].0.fetch_add(value, Ordering::Relaxed);
-        }
-    }
-}
-
-/// Network-related metrics.
-#[derive(Debug, Default)]
-pub struct VsockMetrics {
-    // #[serde(flatten, with = "as_perdev")]
-    /// Number of times when activate failed on a network device.
-    pub activate_fails: Lazy<SharedIncMetricPerDev>,
-    /// Number of times when interacting with the space config of a network device failed.
-    pub cfg_fails: Lazy<SharedIncMetricPerDev>,
-    //// Number of times the mac address was updated through the config space.
-    pub mac_address_updates: Lazy<SharedIncMetricPerDev>,
-    /// No available buffer for the net device rx queue.
-    pub no_rx_avail_buffer: Lazy<SharedIncMetricPerDev>,
-    /// No available buffer for the net device tx queue.
-    pub no_tx_avail_buffer: Lazy<SharedIncMetricPerDev>,
-    /// Number of times when handling events on a network device failed.
-    pub event_fails: Lazy<SharedIncMetricPerDev>,
-    /// Number of events associated with the receiving queue.
-    pub rx_queue_event_count: Lazy<SharedIncMetricPerDev>,
-    /// Number of events associated with the rate limiter installed on the receiving path.
-    pub rx_event_rate_limiter_count: Lazy<SharedIncMetricPerDev>,
-    /// Number of RX partial writes to guest.
-    pub rx_partial_writes: Lazy<SharedIncMetricPerDev>,
-    /// Number of RX rate limiter throttling events.
-    pub rx_rate_limiter_throttled: Lazy<SharedIncMetricPerDev>,
-    /// Number of events received on the associated tap.
-    pub rx_tap_event_count: Lazy<SharedIncMetricPerDev>,
-    /// Number of bytes received.
-    pub rx_bytes_count: Lazy<SharedIncMetricPerDev>,
-    /// Number of packets received.
-    pub rx_packets_count: Lazy<SharedIncMetricPerDev>,
-    /// Number of errors while receiving data.
-    pub rx_fails: Lazy<SharedIncMetricPerDev>,
-    /// Number of successful read operations while receiving data.
-    pub rx_count: Lazy<SharedIncMetricPerDev>,
-    /// Number of times reading from TAP failed.
-    pub tap_read_fails: Lazy<SharedIncMetricPerDev>,
-    /// Number of times writing to TAP failed.
-    pub tap_write_fails: Lazy<SharedIncMetricPerDev>,
-    /// Number of transmitted bytes.
-    pub tx_bytes_count: Lazy<SharedIncMetricPerDev>,
-    /// Number of malformed TX frames.
-    pub tx_malformed_frames: Lazy<SharedIncMetricPerDev>,
-    /// Number of errors while transmitting data.
-    pub tx_fails: Lazy<SharedIncMetricPerDev>,
-    /// Number of successful write operations while transmitting data.
-    pub tx_count: Lazy<SharedIncMetricPerDev>,
-    /// Number of transmitted packets.
-    pub tx_packets_count: Lazy<SharedIncMetricPerDev>,
-    /// Number of TX partial reads from guest.
-    pub tx_partial_reads: Lazy<SharedIncMetricPerDev>,
-    /// Number of events associated with the transmitting queue.
-    pub tx_queue_event_count: Lazy<SharedIncMetricPerDev>,
-    /// Number of events associated with the rate limiter installed on the transmitting path.
-    pub tx_rate_limiter_event_count: Lazy<SharedIncMetricPerDev>,
-    /// Number of RX rate limiter throttling events.
-    pub tx_rate_limiter_throttled: Lazy<SharedIncMetricPerDev>,
-    /// Number of packets with a spoofed mac, sent by the guest.
-    pub tx_spoofed_mac_count: Lazy<SharedIncMetricPerDev>,
-}
-
-impl VsockMetrics {
-    /// Const default construction.
-    pub const fn new() -> Self {
-        Self {
-            activate_fails: Lazy::new(SharedIncMetricPerDev::new),
-            cfg_fails: Lazy::new(SharedIncMetricPerDev::new),
-            mac_address_updates: Lazy::new(SharedIncMetricPerDev::new),
-            no_rx_avail_buffer: Lazy::new(SharedIncMetricPerDev::new),
-            no_tx_avail_buffer: Lazy::new(SharedIncMetricPerDev::new),
-            event_fails: Lazy::new(SharedIncMetricPerDev::new),
-            rx_queue_event_count: Lazy::new(SharedIncMetricPerDev::new),
-            rx_event_rate_limiter_count: Lazy::new(SharedIncMetricPerDev::new),
-            rx_partial_writes: Lazy::new(SharedIncMetricPerDev::new),
-            rx_rate_limiter_throttled: Lazy::new(SharedIncMetricPerDev::new),
-            rx_tap_event_count: Lazy::new(SharedIncMetricPerDev::new),
-            rx_bytes_count: Lazy::new(SharedIncMetricPerDev::new),
-            rx_packets_count: Lazy::new(SharedIncMetricPerDev::new),
-            rx_fails: Lazy::new(SharedIncMetricPerDev::new),
-            rx_count: Lazy::new(SharedIncMetricPerDev::new),
-            tap_read_fails: Lazy::new(SharedIncMetricPerDev::new),
-            tap_write_fails: Lazy::new(SharedIncMetricPerDev::new),
-            tx_bytes_count: Lazy::new(SharedIncMetricPerDev::new),
-            tx_malformed_frames: Lazy::new(SharedIncMetricPerDev::new),
-            tx_fails: Lazy::new(SharedIncMetricPerDev::new),
-            tx_count: Lazy::new(SharedIncMetricPerDev::new),
-            tx_packets_count: Lazy::new(SharedIncMetricPerDev::new),
-            tx_partial_reads: Lazy::new(SharedIncMetricPerDev::new),
-            tx_queue_event_count: Lazy::new(SharedIncMetricPerDev::new),
-            tx_rate_limiter_event_count: Lazy::new(SharedIncMetricPerDev::new),
-            tx_rate_limiter_throttled: Lazy::new(SharedIncMetricPerDev::new),
-            tx_spoofed_mac_count: Lazy::new(SharedIncMetricPerDev::new),
-        }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// mod as_net {
-//     // use serde::ser::SerializeMap;
-//     use super::*;
-
-//     pub fn serialize<S>(serializer: S) -> Result<S::Ok, S::Error>
-//         where
-//             S: serde::Serializer {
-//                 get_serialized_metrics(serializer)
-//     }
-// }
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////
 pub trait DeviceActivatefails{
     fn activate_fails(&self);
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct NetDeviceMetricsDummmy{}
 impl NetDeviceMetricsDummmy{
     pub const fn new() -> Self{
@@ -444,29 +257,22 @@ impl NetDeviceMetricsDummmy{
 
 impl DeviceActivatefails for NetDeviceMetricsDummmy{
     fn activate_fails(&self) {
-        net_activate_fails();
+        NetDeviceMetricsHelper::activate_fails();
     }
 }
 impl Serialize for NetDeviceMetricsDummmy{
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where
             S: Serializer {
-                get_serialized_metrics(serializer)
+                NetDeviceMetricsHelper::serialize_metrics(serializer)
     }
 }
 
 /// Structure storing all metrics while enforcing serialization support on them.
 #[derive(Serialize)]
 pub struct FirecrackerMetrics {
-    /// Metrics related to seccomp filtering.
-    pub seccomp: SeccompMetrics,
-    #[serde(skip)]
-    pub vsock: VsockMetrics,
-    // #[serde(flatten, with = "as_net")]
     #[serde(flatten)]
     pub net: NetDeviceMetricsDummmy,
-    // pub net_aggregate1: NetDeviceMetrics,
-    // pub net_aggregate2: NetDeviceMetrics,
 }
 
 impl Default for FirecrackerMetrics {
@@ -478,22 +284,57 @@ impl Default for FirecrackerMetrics {
 impl Debug for FirecrackerMetrics {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FirecrackerMetrics")
-            .field("seccomp", &self.seccomp)
+            .field("net", &self.net)
             .finish()
     }
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 impl FirecrackerMetrics {
     /// Const default construction.
     pub const fn new() -> Self {
         Self {
-            seccomp: SeccompMetrics::new(),
-            vsock: VsockMetrics::new(),
             net: NetDeviceMetricsDummmy::new(),
-            // net_aggregate1: NetDeviceMetrics::new(),
-            // net_aggregate2: NetDeviceMetrics::new(),
+        }
+    }
+}
+/// Structure storing all metrics while enforcing serialization support on them.
+#[derive(Serialize)]
+pub struct FirecrackerMetricsDummy {
+    pub net: NetDeviceMetrics,
+    pub net0: NetDeviceMetrics,
+    pub net1: NetDeviceMetrics,
+    pub net2: NetDeviceMetrics,
+}
+
+impl Default for FirecrackerMetricsDummy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Debug for FirecrackerMetricsDummy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FirecrackerMetrics")
+            .field("net", &self.net)
+            // .field("net0", &self.net0)
+            // .field("net1", &self.net1)
+            // .field("net2", &self.net2)
+            .finish()
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+impl FirecrackerMetricsDummy {
+    /// Const default construction.
+    pub const fn new() -> Self {
+        Self {
+            net: NetDeviceMetrics::new(),
+            net0: NetDeviceMetrics::new(),
+            net1: NetDeviceMetrics::new(),
+            net2: NetDeviceMetrics::new(),
         }
     }
 }

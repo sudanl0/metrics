@@ -1,16 +1,16 @@
-use crate::metrics::{SharedIncMetric, IncMetric};
-use serde::{Serialize, ser::SerializeMap};
+use crate::metrics::{SharedIncMetric, IncMetric, PerDeviceMetricsHelper};
+use serde::{Serialize, Serializer, ser::SerializeMap};
 
+///////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////// METRICS ///////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+#[derive(Default)]
 struct NetDeviceMetricsBuilder {
     metrics: Vec<NetDeviceMetrics>,
 }
-
-static mut NET_DEV_METRICS_PVT: NetDeviceMetricsBuilder = NetDeviceMetricsBuilder {
-    metrics: Vec::new(),
-};
-
 impl NetDeviceMetricsBuilder {
-    fn new_metrics() -> &'static NetDeviceMetrics {
+    fn new() -> &'static NetDeviceMetrics {
         unsafe{
             NET_DEV_METRICS_PVT.metrics.push(NetDeviceMetrics::new());
             &NET_DEV_METRICS_PVT.metrics[NET_DEV_METRICS_PVT.metrics.len()-1]
@@ -18,28 +18,38 @@ impl NetDeviceMetricsBuilder {
     }
 }
 
-pub fn net_activate_fails() {
-    NetDeviceMetricsBuilder::new_metrics().activate_fails.inc();
-}
+/// Contains Network-related metrics per device.
+static mut NET_DEV_METRICS_PVT: NetDeviceMetricsBuilder = NetDeviceMetricsBuilder {
+    metrics: Vec::new(),
+};
 
-pub fn get_serialized_metrics<S>(serializer: S) -> Result<S::Ok, S::Error>
-    where
-    S: serde::Serializer {
-    let dev = "net".to_string();
-    unsafe{
-        let mut seq = serializer.serialize_map(Some(1+NET_DEV_METRICS_PVT.metrics.len()))?;
+pub struct NetDeviceMetricsHelper {}
+impl PerDeviceMetricsHelper for NetDeviceMetricsHelper {
+    fn activate_fails() {
+        NetDeviceMetricsBuilder::new().activate_fails.inc();
+    }
+    fn serialize_metrics<S:Serializer>(serializer: S)
+    -> Result<S::Ok, S::Error>{
+        let dev = "net".to_string();
+        unsafe{
+            // +1 to accomodate aggregate net metrics
+            let mut seq =
+            serializer.serialize_map(
+                Some(1+NET_DEV_METRICS_PVT.metrics.len()))?;
 
-        let net_aggregated: NetDeviceMetrics = NET_DEV_METRICS_PVT.metrics
-        .iter()
-        .fold(NetDeviceMetrics::default(), |mut agg, net|{ agg.add(net); agg});
+            let net_aggregated: NetDeviceMetrics = NET_DEV_METRICS_PVT.metrics
+            .iter()
+            .fold(NetDeviceMetrics::default(),
+                 |mut net_agg, net|{ net_agg.aggregate(net); net_agg});
 
-        seq.serialize_entry("net", &net_aggregated)?;
-
-        for i in 0..NET_DEV_METRICS_PVT.metrics.len() {
-            let devn = dev.clone() + &i.to_string();
-            seq.serialize_entry(&devn, &NET_DEV_METRICS_PVT.metrics[i])?;
+            seq.serialize_entry("net", &net_aggregated)?;
+    
+            for i in 0..NET_DEV_METRICS_PVT.metrics.len() {
+                let devn = dev.clone() + &i.to_string();
+                seq.serialize_entry(&devn, &NET_DEV_METRICS_PVT.metrics[i])?;
+            }
+            seq.end()
         }
-        seq.end()
     }
 }
 
@@ -134,48 +144,56 @@ impl NetDeviceMetrics {
             tx_spoofed_mac_count: SharedIncMetric::new(),
         }
     }
-    fn add(&mut self, other: &super::netdevice::NetDeviceMetrics) {
-        self.activate_fails.add(other.activate_fails.get());
-        self.cfg_fails.add(other.cfg_fails.get());
-        self.mac_address_updates.add(other.mac_address_updates.get());
-        self.no_rx_avail_buffer.add(other.no_rx_avail_buffer.get());
-        self.no_tx_avail_buffer.add(other.no_tx_avail_buffer.get());
-        self.event_fails.add(other.event_fails.get());
-        self.rx_queue_event_count.add(other.rx_queue_event_count.get());
-        self.rx_event_rate_limiter_count.add(other.rx_event_rate_limiter_count.get());
-        self.rx_partial_writes.add(other.rx_partial_writes.get());
-        self.rx_rate_limiter_throttled.add(other.rx_rate_limiter_throttled.get());
-        self.rx_tap_event_count.add(other.rx_tap_event_count.get());
-        self.rx_bytes_count.add(other.rx_bytes_count.get());
-        self.rx_packets_count.add(other.rx_packets_count.get());
-        self.rx_fails.add(other.rx_fails.get());
-        self.rx_count.add(other.rx_count.get());
-        self.tap_read_fails.add(other.tap_read_fails.get());
-        self.tap_write_fails.add(other.tap_write_fails.get());
-        self.tx_bytes_count.add(other.tx_bytes_count.get());
-        self.tx_malformed_frames.add(other.tx_malformed_frames.get());
-        self.tx_fails.add(other.tx_fails.get());
-        self.tx_count.add(other.tx_count.get());
-        self.tx_packets_count.add(other.tx_packets_count.get());
-        self.tx_partial_reads.add(other.tx_partial_reads.get());
-        self.tx_queue_event_count.add(other.tx_queue_event_count.get());
-        self.tx_rate_limiter_event_count.add(other.tx_rate_limiter_event_count.get());
-        self.tx_rate_limiter_throttled.add(other.tx_rate_limiter_throttled.get());
-        self.tx_spoofed_mac_count.add(other.tx_spoofed_mac_count.get());
+
+    /// Net metrics are SharedIncMetric where the diff of current vs
+    /// old is serialized i.e. serialize_u64(current-old).
+    /// So to have the aggregate serialized in same way we need to
+    /// fetch the diff of current vs old metrics and add it to the
+    /// aggregate.
+    fn aggregate(&mut self, other: &super::netdevice::NetDeviceMetrics) {
+        self.activate_fails.add(other.activate_fails.fetch_diff());
+        self.cfg_fails.add(other.cfg_fails.fetch_diff());
+        self.mac_address_updates.add(other.mac_address_updates.fetch_diff());
+        self.no_rx_avail_buffer.add(other.no_rx_avail_buffer.fetch_diff());
+        self.no_tx_avail_buffer.add(other.no_tx_avail_buffer.fetch_diff());
+        self.event_fails.add(other.event_fails.fetch_diff());
+        self.rx_queue_event_count.add(other.rx_queue_event_count.fetch_diff());
+        self.rx_event_rate_limiter_count.add(other.rx_event_rate_limiter_count.fetch_diff());
+        self.rx_partial_writes.add(other.rx_partial_writes.fetch_diff());
+        self.rx_rate_limiter_throttled.add(other.rx_rate_limiter_throttled.fetch_diff());
+        self.rx_tap_event_count.add(other.rx_tap_event_count.fetch_diff());
+        self.rx_bytes_count.add(other.rx_bytes_count.fetch_diff());
+        self.rx_packets_count.add(other.rx_packets_count.fetch_diff());
+        self.rx_fails.add(other.rx_fails.fetch_diff());
+        self.rx_count.add(other.rx_count.fetch_diff());
+        self.tap_read_fails.add(other.tap_read_fails.fetch_diff());
+        self.tap_write_fails.add(other.tap_write_fails.fetch_diff());
+        self.tx_bytes_count.add(other.tx_bytes_count.fetch_diff());
+        self.tx_malformed_frames.add(other.tx_malformed_frames.fetch_diff());
+        self.tx_fails.add(other.tx_fails.fetch_diff());
+        self.tx_count.add(other.tx_count.fetch_diff());
+        self.tx_packets_count.add(other.tx_packets_count.fetch_diff());
+        self.tx_partial_reads.add(other.tx_partial_reads.fetch_diff());
+        self.tx_queue_event_count.add(other.tx_queue_event_count.fetch_diff());
+        self.tx_rate_limiter_event_count.add(other.tx_rate_limiter_event_count.fetch_diff());
+        self.tx_rate_limiter_throttled.add(other.tx_rate_limiter_throttled.fetch_diff());
+        self.tx_spoofed_mac_count.add(other.tx_spoofed_mac_count.fetch_diff());
     }
 }
 
+#[allow(dead_code)]
 pub struct Net{
     #[allow(dead_code)]
     pub(crate) id: String,
     pub(crate) metrics: &'static NetDeviceMetrics,
 }
 
+#[allow(dead_code)]
 impl Net{
     pub fn new(id: String) -> Net{
         Net{
             id: id,
-            metrics: NetDeviceMetricsBuilder::new_metrics()
+            metrics: NetDeviceMetricsBuilder::new()
         }
     }
 }
