@@ -30,7 +30,6 @@ impl PerDeviceMetricsHelper for NetDeviceMetricsHelper {
     }
     fn serialize_metrics<S:Serializer>(serializer: S)
     -> Result<S::Ok, S::Error>{
-        let dev = "net".to_string();
         unsafe{
             // +1 to accomodate aggregate net metrics
             let mut seq =
@@ -45,7 +44,7 @@ impl PerDeviceMetricsHelper for NetDeviceMetricsHelper {
             seq.serialize_entry("net", &net_aggregated)?;
     
             for i in 0..NET_DEV_METRICS_PVT.metrics.len() {
-                let devn = dev.clone() + &i.to_string();
+                let devn = format!("net{}", i);
                 seq.serialize_entry(&devn, &NET_DEV_METRICS_PVT.metrics[i])?;
             }
             seq.end()
@@ -111,6 +110,7 @@ pub struct NetDeviceMetrics {
     /// Number of packets with a spoofed mac, sent by the guest.
     pub tx_spoofed_mac_count: SharedIncMetric,
 }
+
 impl NetDeviceMetrics {
     /// Const default construction.
     pub const fn new() -> Self {
