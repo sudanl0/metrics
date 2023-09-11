@@ -25,9 +25,6 @@ static mut NET_DEV_METRICS_PVT: NetDeviceMetricsBuilder = NetDeviceMetricsBuilde
 
 pub struct NetDeviceMetricsHelper {}
 impl PerDeviceMetricsHelper for NetDeviceMetricsHelper {
-    fn activate_fails() {
-        NetDeviceMetricsBuilder::new().activate_fails.inc();
-    }
     fn serialize_metrics<S:Serializer>(serializer: S)
     -> Result<S::Ok, S::Error>{
         unsafe{

@@ -236,14 +236,8 @@ impl Serialize for SharedStoreMetric {
 ///////////////////////////////////////////////////////////////////////////////
 /// Trait to be implemented by all devices having metrics that need to be tracked.
 pub trait PerDeviceMetricsHelper{
-    /// to report failure in activation of a device
-    fn activate_fails();
-    // /// each device implements this function to serialize its metrics
+    /// each device implements this function to serialize its metrics
     fn serialize_metrics<S:Serializer>(serializer: S) -> Result<S::Ok, S::Error>;
-}
-
-pub trait DeviceActivatefails{
-    fn activate_fails(&self);
 }
 
 #[derive(Default, Debug)]
@@ -254,11 +248,6 @@ impl NetDeviceMetricsDummmy{
     }
 }
 
-impl DeviceActivatefails for NetDeviceMetricsDummmy{
-    fn activate_fails(&self) {
-        NetDeviceMetricsHelper::activate_fails();
-    }
-}
 impl Serialize for NetDeviceMetricsDummmy{
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where

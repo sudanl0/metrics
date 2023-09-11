@@ -4,7 +4,6 @@ use crate::metrics::{METRICS, METRICSDUMMY, Metrics, FirecrackerMetrics};
 use std::time::SystemTime;
 use std::io::LineWriter;
 use std::fs::File;
-use crate::metrics::DeviceActivatefails;
 use crate::netdevice::Net;
 use crate::metrics::IncMetric;
 
@@ -65,7 +64,6 @@ fn test_net_metrics(m: &Metrics<FirecrackerMetrics, LineWriter<File>>){
     net1.metrics.tx_rate_limiter_event_count.add(10);
     net1.metrics.tx_rate_limiter_throttled.add(10);
     net1.metrics.tx_spoofed_mac_count.add(10);
-    METRICS.net.activate_fails();
     let t1 = SystemTime::now();
     println!("Time take to update metrics with proposal: {:?}", t1.duration_since(t0).unwrap());
 // */
