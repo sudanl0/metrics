@@ -1,6 +1,6 @@
 mod metrics;
 mod netdevice;
-use crate::metrics::{METRICS, METRICSDUMMY, Metrics, FirecrackerMetrics};
+use crate::metrics::{METRICS, Metrics, FirecrackerMetrics};
 use std::time::SystemTime;
 use std::io::LineWriter;
 use std::fs::File;
@@ -76,15 +76,6 @@ fn test_net_metrics(m: &Metrics<FirecrackerMetrics, LineWriter<File>>){
 
 fn main(){
     let m = &METRICS;
-    let md = &METRICSDUMMY;
-
-    let fd = File::create("./metricsd.json").expect("Failed to create temporary metrics file");
-    assert!(md.init(LineWriter::new(fd)).is_ok());
-
-    let t0 = SystemTime::now();
-    assert!(md.write().is_ok());
-    let t1 = SystemTime::now();
-    println!("Time take to flush metrics with 3 fields of NetDeviceMetrics: {:?}", t1.duration_since(t0).unwrap());
 
     let f = File::create("./metrics.json").expect("Failed to create temporary metrics file");
     assert!(m.init(LineWriter::new(f)).is_ok());

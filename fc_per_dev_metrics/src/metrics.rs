@@ -4,7 +4,6 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use crate::netdevice::NetDeviceMetricsHelper;
-use crate::netdevice::NetDeviceMetrics;
 
 use serde::{Serialize, Serializer};
 
@@ -13,9 +12,6 @@ pub type FcLineWriter = std::io::LineWriter<std::fs::File>;
 /// Static instance used for handling metrics.
 pub static METRICS: Metrics<FirecrackerMetrics, FcLineWriter> =
     Metrics::<FirecrackerMetrics, FcLineWriter>::new(FirecrackerMetrics::new());
-#[allow(unused)]
-pub static METRICSDUMMY: Metrics<FirecrackerMetricsDummy, FcLineWriter> =
-    Metrics::<FirecrackerMetricsDummy, FcLineWriter>::new(FirecrackerMetricsDummy::new());
 
 /// Metrics system.
 // All member fields have types which are Sync, and exhibit interior mutability, so
@@ -284,46 +280,6 @@ impl FirecrackerMetrics {
     pub const fn new() -> Self {
         Self {
             net: NetDeviceMetricsDummmy::new(),
-        }
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
-/// Structure storing all metrics while enforcing serialization support on them.
-#[derive(Serialize)]
-pub struct FirecrackerMetricsDummy {
-    pub net: NetDeviceMetrics,
-    pub net0: NetDeviceMetrics,
-    pub net1: NetDeviceMetrics,
-    pub net2: NetDeviceMetrics,
-}
-
-impl Default for FirecrackerMetricsDummy {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Debug for FirecrackerMetricsDummy {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("FirecrackerMetrics")
-            .field("net", &self.net)
-            // .field("net0", &self.net0)
-            // .field("net1", &self.net1)
-            // .field("net2", &self.net2)
-            .finish()
-    }
-}
-
-impl FirecrackerMetricsDummy {
-    /// Const default construction.
-    pub const fn new() -> Self {
-        Self {
-            net: NetDeviceMetrics::new(),
-            net0: NetDeviceMetrics::new(),
-            net1: NetDeviceMetrics::new(),
-            net2: NetDeviceMetrics::new(),
         }
     }
 }
