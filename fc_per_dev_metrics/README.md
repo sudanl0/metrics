@@ -7,6 +7,7 @@ Time take to flush metrics with proposal: 119µs
 
 ```json
 {
+  "utc_timestamp_ms": 1694650755564,
   "net": {
     "activate_fails": 0,
     "cfg_fails": 20,

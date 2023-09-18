@@ -6,6 +6,7 @@ version = 3
 name = "fc_per_dev_metrics"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "once_cell",
  "paste",
  "serde",
@@ -18,6 +19,12 @@ name = "itoa"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
+
+[[package]]
+name = "libc"
+version = "0.2.148"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9cdc71e17332e86d2e1d38c1f99edcb6288ee11b815fb1a4b049eaa2114d369b"
 
 [[package]]
 name = "once_cell"

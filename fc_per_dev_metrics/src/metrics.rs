@@ -1,11 +1,14 @@
+// use std::fmt::{Debug, format};
 use std::fmt::Debug;
 use std::io::Write;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
+use std::vec;
 use crate::netdevice::NetDeviceMetricsHelper;
+use std::collections::BTreeMap;
 
-use serde::{Serialize, Serializer};
+use serde::{Serialize, Serializer, Deserialize, ser::SerializeMap};
 
 pub type FcLineWriter = std::io::LineWriter<std::fs::File>;
 
@@ -21,6 +24,10 @@ pub struct Metrics<T: Serialize, M: Write + Send> {
     // Metrics will get flushed here.
     metrics_buf: OnceLock<Mutex<M>>,
     pub app_metrics: T,
+}
+#[derive(Debug, Deserialize)]
+pub struct EMFMetrics{
+    inner: BTreeMap<String,usize>,
 }
 
 impl<T: Serialize + Debug, M: Write + Send + Debug> Metrics<T, M> {
@@ -75,6 +82,107 @@ impl<T: Serialize + Debug, M: Write + Send + Debug> Metrics<T, M> {
         if let Some(lock) = self.metrics_buf.get() {
             match serde_json::to_string_pretty(&self.app_metrics) {
                 Ok(msg) => {
+                    #[derive(Debug, Serialize,Deserialize)]
+                    struct Emf{
+                        utc_timestamp_ms: usize,
+                        #[serde(flatten)]
+                        innerm: BTreeMap<String,BTreeMap<String,usize>>,
+                    }
+                    #[derive(Debug, Serialize,Deserialize)]
+                    struct Metric{
+                        #[serde(rename = "Name")]
+                        name: String,
+                        #[serde(rename = "Unit")]
+                        unit: String,
+                    }
+                    #[derive(Debug, Serialize,Deserialize)]
+                    struct MetricDirective{
+                        #[serde(rename = "Namespace")]
+                        namespace: String,
+                        #[serde(rename = "Dimensions")]
+                        dimensions: Vec<Vec<String>>,
+                        #[serde(rename = "Metrics")]
+                        metrics: Vec<Metric>,
+                        // Metrics: Vec<BTreeMap<String,String>>,
+                    }
+                    #[derive(Debug, Serialize,Deserialize)]
+                    struct MetricDirectiveObj{
+                        #[serde(rename = "Timestamp")]
+                        timestamp: usize,
+                        #[serde(rename = "CloudWatchMetrics")]
+                        cloud_watch_metrics: Vec<MetricDirective>,
+                    }
+
+                    mod as_emf_metrics{
+                        use super::*;
+                        pub fn serialize<S>(metrics: &Vec<EMFMetrics>, serializer: S) -> Result<S::Ok, S::Error>
+                        where
+                            S: Serializer,
+                            {
+                                let mut seq = serializer.serialize_map(Some(metrics.len()))?;
+                                for metric in metrics.iter() {
+                                    for (key,value) in (*metric).inner.iter(){
+                                        seq.serialize_entry(key,value)?;
+                                    }
+                                }
+                                seq.end()
+                            }
+                    }
+                    #[derive(Debug, Serialize)]
+                    struct EmfStruct {
+                        #[serde(flatten)]
+                        aws: BTreeMap<String,MetricDirectiveObj>,
+                        #[serde(rename = "SandboxId")]
+                        sandbox_id: usize,
+                        #[serde(flatten, with = "as_emf_metrics")]
+                        metrics: Vec<EMFMetrics>,
+                    }
+                    let mut final_emf = EmfStruct{
+                        aws: BTreeMap::new(),
+                        sandbox_id: 1234,
+                        metrics: Vec::new(),
+                    };
+                    final_emf.aws.insert("_aws".to_string(),
+                            MetricDirectiveObj{
+                            timestamp: 0,
+                            cloud_watch_metrics: vec![MetricDirective{
+                            namespace: "TestNs".to_string(),
+                            dimensions: Vec::new(),
+                            metrics: Vec::new(),
+                            }]
+                        }
+                    );
+                    fn get_unit(key: &str) -> String{
+                        let mut unit = "Count".to_string();
+                        if key.to_lowercase().ends_with("_bytes") || key.to_lowercase().ends_with("_bytes_count"){
+                            unit = "Bytes".to_string();
+                        }else if key.to_lowercase().ends_with("_ms"){
+                            unit = "Milliseconds".to_string();
+                        }else if key.to_lowercase().ends_with("_us") {
+                            unit = "Microseconds".to_string()
+                        }
+                        unit
+                    }
+                    let emf = serde_json::from_str::<Emf>(msg.as_str()).unwrap();
+                    // Timestamp = emf.utc_timestamp_ms;
+                    let mobj = final_emf.aws.get_mut("_aws").unwrap();
+                    mobj.timestamp = emf.utc_timestamp_ms;
+                    mobj.cloud_watch_metrics[0].dimensions.push(vec!["Sandbox".to_string()]);
+                    for (key,value) in emf.innerm.iter(){
+                        for (k,v) in value.iter(){
+                            let emfmetrics = EMFMetrics{
+                                inner: BTreeMap::from([(format!("{}.{}", key, k),*v)])
+                            };
+                            final_emf.metrics.push(emfmetrics);
+                            mobj.cloud_watch_metrics[0].metrics.push(
+                                Metric{
+                                    name: format!("{}.{}", key, k),
+                                    unit: get_unit(k),
+                                }
+                            );
+                        }
+                    }
+                    println!("{}",serde_json::to_string_pretty(&final_emf).unwrap());
                     if let Ok(mut guard) = lock.lock() {
                         // No need to explicitly call flush because the underlying LineWriter
                         // flushes automatically whenever a newline is
@@ -252,9 +360,64 @@ impl Serialize for NetDeviceMetricsDummmy{
     }
 }
 
+#[derive(Debug, Default)]
+struct SerializeToUtcTimestampMs;
+impl SerializeToUtcTimestampMs {
+    /// Const default construction.
+    pub const fn new() -> Self {
+        SerializeToUtcTimestampMs
+    }
+}
+
+#[derive(Debug)]
+pub enum ClockType {
+    /// Equivalent to `libc::CLOCK_MONOTONIC`.
+    Monotonic,
+    /// Equivalent to `libc::CLOCK_REALTIME`.
+    Real,
+    /// Equivalent to `libc::CLOCK_PROCESS_CPUTIME_ID`.
+    ProcessCpu,
+    /// Equivalent to `libc::CLOCK_THREAD_CPUTIME_ID`.
+    ThreadCpu,
+}
+pub const NANOS_PER_SECOND: u64 = 1_000_000_000;
+pub fn seconds_to_nanoseconds(value: i64) -> Option<i64> {
+    value.checked_mul(i64::try_from(NANOS_PER_SECOND).unwrap())
+}
+impl From<ClockType> for libc::clockid_t {
+    fn from(clock_type: ClockType) -> Self {
+        match clock_type {
+            ClockType::Monotonic => libc::CLOCK_MONOTONIC,
+            ClockType::Real => libc::CLOCK_REALTIME,
+            ClockType::ProcessCpu => libc::CLOCK_PROCESS_CPUTIME_ID,
+            ClockType::ThreadCpu => libc::CLOCK_THREAD_CPUTIME_ID,
+        }
+    }
+}
+pub fn get_time_ns(clock_type: ClockType) -> u64 {
+    let mut time_struct = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: Safe because the parameters are valid.
+    unsafe { libc::clock_gettime(clock_type.into(), &mut time_struct) };
+    u64::try_from(seconds_to_nanoseconds(time_struct.tv_sec).expect("Time conversion overflow"))
+        .unwrap()
+        + u64::try_from(time_struct.tv_nsec).unwrap()
+}
+
+impl Serialize for SerializeToUtcTimestampMs {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_i64(
+            i64::try_from(get_time_ns(ClockType::Real) / 1_000_000)
+                .unwrap(),
+        )
+    }
+}
 /// Structure storing all metrics while enforcing serialization support on them.
 #[derive(Serialize)]
 pub struct FirecrackerMetrics {
+    utc_timestamp_ms: SerializeToUtcTimestampMs,
     #[serde(flatten)]
     pub net: NetDeviceMetricsDummmy,
 }
@@ -279,6 +442,7 @@ impl FirecrackerMetrics {
     /// Const default construction.
     pub const fn new() -> Self {
         Self {
+            utc_timestamp_ms: SerializeToUtcTimestampMs::new(),
             net: NetDeviceMetricsDummmy::new(),
         }
     }
