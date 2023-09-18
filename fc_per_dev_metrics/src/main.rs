@@ -65,13 +65,13 @@ fn test_net_metrics(m: &Metrics<FirecrackerMetrics, LineWriter<File>>){
     net1.metrics.tx_rate_limiter_throttled.add(10);
     net1.metrics.tx_spoofed_mac_count.add(10);
     let t1 = SystemTime::now();
-    println!("Time take to update metrics with proposal: {:?}", t1.duration_since(t0).unwrap());
+    println!("Time taken to update metrics with proposal: {:?}", t1.duration_since(t0).unwrap());
 // */
 
     let t0 = SystemTime::now();
     assert!(m.write().is_ok());
     let t1 = SystemTime::now();
-    println!("Time take to flush metrics with proposal: {:?}", t1.duration_since(t0).unwrap());
+    println!("Time taken to flush metrics with proposal: {:?}", t1.duration_since(t0).unwrap());
 }
 
 fn main(){
