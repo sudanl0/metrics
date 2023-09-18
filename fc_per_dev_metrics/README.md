@@ -1,6 +1,6 @@
 ## Metrics experiments
 
-###In EMF:
+### In EMF:
 ```json
 {
   "_aws": {
@@ -427,7 +427,7 @@
 }
 ```
 
-###In FC metrics format:
+### In FC metrics format:
 ```json
 {
   "utc_timestamp_ms": 1694650755564,
