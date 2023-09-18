@@ -1,11 +1,102 @@
 ## Metrics experiments
 
-```
-Time take to update metrics with proposal: 1µs
-Time take to flush metrics with proposal: 119µs
+```json
+In EMF:
+{
+  "utc_timestamp_ms": 1695038224516,
+  "net": {
+    "activate_fails": 0,
+    "cfg_fails": 20,
+    "mac_address_updates": 20,
+    "no_rx_avail_buffer": 11,
+    "no_tx_avail_buffer": 11,
+    "event_fails": 11,
+    "rx_queue_event_count": 11,
+    "rx_event_rate_limiter_count": 11,
+    "rx_partial_writes": 20,
+    "rx_rate_limiter_throttled": 20,
+    "rx_tap_event_count": 20,
+    "rx_bytes_count": 20,
+    "rx_packets_count": 20,
+    "rx_fails": 20,
+    "rx_count": 20,
+    "tap_read_fails": 20,
+    "tap_write_fails": 20,
+    "tx_bytes_count": 20,
+    "tx_malformed_frames": 20,
+    "tx_fails": 20,
+    "tx_count": 20,
+    "tx_packets_count": 20,
+    "tx_partial_reads": 20,
+    "tx_queue_event_count": 20,
+    "tx_rate_limiter_event_count": 20,
+    "tx_rate_limiter_throttled": 20,
+    "tx_spoofed_mac_count": 20
+  },
+  "net0": {
+    "activate_fails": 0,
+    "cfg_fails": 10,
+    "mac_address_updates": 10,
+    "no_rx_avail_buffer": 1,
+    "no_tx_avail_buffer": 1,
+    "event_fails": 1,
+    "rx_queue_event_count": 1,
+    "rx_event_rate_limiter_count": 1,
+    "rx_partial_writes": 10,
+    "rx_rate_limiter_throttled": 10,
+    "rx_tap_event_count": 10,
+    "rx_bytes_count": 10,
+    "rx_packets_count": 10,
+    "rx_fails": 10,
+    "rx_count": 10,
+    "tap_read_fails": 10,
+    "tap_write_fails": 10,
+    "tx_bytes_count": 10,
+    "tx_malformed_frames": 10,
+    "tx_fails": 10,
+    "tx_count": 10,
+    "tx_packets_count": 10,
+    "tx_partial_reads": 10,
+    "tx_queue_event_count": 10,
+    "tx_rate_limiter_event_count": 10,
+    "tx_rate_limiter_throttled": 10,
+    "tx_spoofed_mac_count": 10
+  },
+  "net1": {
+    "activate_fails": 0,
+    "cfg_fails": 10,
+    "mac_address_updates": 10,
+    "no_rx_avail_buffer": 10,
+    "no_tx_avail_buffer": 10,
+    "event_fails": 10,
+    "rx_queue_event_count": 10,
+    "rx_event_rate_limiter_count": 10,
+    "rx_partial_writes": 10,
+    "rx_rate_limiter_throttled": 10,
+    "rx_tap_event_count": 10,
+    "rx_bytes_count": 10,
+    "rx_packets_count": 10,
+    "rx_fails": 10,
+    "rx_count": 10,
+    "tap_read_fails": 10,
+    "tap_write_fails": 10,
+    "tx_bytes_count": 10,
+    "tx_malformed_frames": 10,
+    "tx_fails": 10,
+    "tx_count": 10,
+    "tx_packets_count": 10,
+    "tx_partial_reads": 10,
+    "tx_queue_event_count": 10,
+    "tx_rate_limiter_event_count": 10,
+    "tx_rate_limiter_throttled": 10,
+    "tx_spoofed_mac_count": 10
+  }
+}
+
 ```
 
 ```json
+In FC metrics format:
 {
   "utc_timestamp_ms": 1694650755564,
   "net": {

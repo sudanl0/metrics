@@ -59,6 +59,109 @@ impl<T: Serialize + Debug, M: Write + Send + Debug> Metrics<T, M> {
             .map_err(|_| MetricsError::AlreadyInitialized)
     }
 
+    pub fn print_emf(&self, fcmetrics: String) {
+        #[derive(Debug, Serialize,Deserialize)]
+        struct Emf{
+            utc_timestamp_ms: usize,
+            #[serde(flatten)]
+            innerm: BTreeMap<String,BTreeMap<String,usize>>,
+        }
+        #[derive(Debug, Serialize,Deserialize)]
+        struct Metric{
+            #[serde(rename = "Name")]
+            name: String,
+            #[serde(rename = "Unit")]
+            unit: String,
+        }
+        #[derive(Debug, Serialize,Deserialize)]
+        struct MetricDirective{
+            #[serde(rename = "Namespace")]
+            namespace: String,
+            #[serde(rename = "Dimensions")]
+            dimensions: Vec<Vec<String>>,
+            #[serde(rename = "Metrics")]
+            metrics: Vec<Metric>,
+            // Metrics: Vec<BTreeMap<String,String>>,
+        }
+        #[derive(Debug, Serialize,Deserialize)]
+        struct MetricDirectiveObj{
+            #[serde(rename = "Timestamp")]
+            timestamp: usize,
+            #[serde(rename = "CloudWatchMetrics")]
+            cloud_watch_metrics: Vec<MetricDirective>,
+        }
+
+        mod as_emf_metrics{
+            use super::*;
+            pub fn serialize<S>(metrics: &Vec<EMFMetrics>, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+                {
+                    let mut seq = serializer.serialize_map(Some(metrics.len()))?;
+                    for metric in metrics.iter() {
+                        for (key,value) in (*metric).inner.iter(){
+                            seq.serialize_entry(key,value)?;
+                        }
+                    }
+                    seq.end()
+                }
+        }
+        #[derive(Debug, Serialize)]
+        struct EmfStruct {
+            #[serde(flatten)]
+            aws: BTreeMap<String,MetricDirectiveObj>,
+            #[serde(rename = "SandboxId")]
+            sandbox_id: usize,
+            #[serde(flatten, with = "as_emf_metrics")]
+            metrics: Vec<EMFMetrics>,
+        }
+        let mut final_emf = EmfStruct{
+            aws: BTreeMap::new(),
+            sandbox_id: 1234,
+            metrics: Vec::new(),
+        };
+        final_emf.aws.insert("_aws".to_string(),
+                MetricDirectiveObj{
+                timestamp: 0,
+                cloud_watch_metrics: vec![MetricDirective{
+                namespace: "TestNs".to_string(),
+                dimensions: Vec::new(),
+                metrics: Vec::new(),
+                }]
+            }
+        );
+        fn get_unit(key: &str) -> String{
+            let mut unit = "Count".to_string();
+            if key.to_lowercase().ends_with("_bytes") || key.to_lowercase().ends_with("_bytes_count"){
+                unit = "Bytes".to_string();
+            }else if key.to_lowercase().ends_with("_ms"){
+                unit = "Milliseconds".to_string();
+            }else if key.to_lowercase().ends_with("_us") {
+                unit = "Microseconds".to_string()
+            }
+            unit
+        }
+        let emf = serde_json::from_str::<Emf>(fcmetrics.as_str()).unwrap();
+        // Timestamp = emf.utc_timestamp_ms;
+        let mobj = final_emf.aws.get_mut("_aws").unwrap();
+        mobj.timestamp = emf.utc_timestamp_ms;
+        mobj.cloud_watch_metrics[0].dimensions.push(vec!["Sandbox".to_string()]);
+        for (key,value) in emf.innerm.iter(){
+            for (k,v) in value.iter(){
+                let emfmetrics = EMFMetrics{
+                    inner: BTreeMap::from([(format!("{}.{}", key, k),*v)])
+                };
+                final_emf.metrics.push(emfmetrics);
+                mobj.cloud_watch_metrics[0].metrics.push(
+                    Metric{
+                        name: format!("{}.{}", key, k),
+                        unit: get_unit(k),
+                    }
+                );
+            }
+        }
+        println!("{}",serde_json::to_string_pretty(&final_emf).unwrap());
+    }
     /// Writes metrics to the destination provided as argument upon initialization of the metrics.
     /// Upon failure, an error is returned if metrics system is initialized and metrics could not be
     /// written.
@@ -82,107 +185,7 @@ impl<T: Serialize + Debug, M: Write + Send + Debug> Metrics<T, M> {
         if let Some(lock) = self.metrics_buf.get() {
             match serde_json::to_string_pretty(&self.app_metrics) {
                 Ok(msg) => {
-                    #[derive(Debug, Serialize,Deserialize)]
-                    struct Emf{
-                        utc_timestamp_ms: usize,
-                        #[serde(flatten)]
-                        innerm: BTreeMap<String,BTreeMap<String,usize>>,
-                    }
-                    #[derive(Debug, Serialize,Deserialize)]
-                    struct Metric{
-                        #[serde(rename = "Name")]
-                        name: String,
-                        #[serde(rename = "Unit")]
-                        unit: String,
-                    }
-                    #[derive(Debug, Serialize,Deserialize)]
-                    struct MetricDirective{
-                        #[serde(rename = "Namespace")]
-                        namespace: String,
-                        #[serde(rename = "Dimensions")]
-                        dimensions: Vec<Vec<String>>,
-                        #[serde(rename = "Metrics")]
-                        metrics: Vec<Metric>,
-                        // Metrics: Vec<BTreeMap<String,String>>,
-                    }
-                    #[derive(Debug, Serialize,Deserialize)]
-                    struct MetricDirectiveObj{
-                        #[serde(rename = "Timestamp")]
-                        timestamp: usize,
-                        #[serde(rename = "CloudWatchMetrics")]
-                        cloud_watch_metrics: Vec<MetricDirective>,
-                    }
-
-                    mod as_emf_metrics{
-                        use super::*;
-                        pub fn serialize<S>(metrics: &Vec<EMFMetrics>, serializer: S) -> Result<S::Ok, S::Error>
-                        where
-                            S: Serializer,
-                            {
-                                let mut seq = serializer.serialize_map(Some(metrics.len()))?;
-                                for metric in metrics.iter() {
-                                    for (key,value) in (*metric).inner.iter(){
-                                        seq.serialize_entry(key,value)?;
-                                    }
-                                }
-                                seq.end()
-                            }
-                    }
-                    #[derive(Debug, Serialize)]
-                    struct EmfStruct {
-                        #[serde(flatten)]
-                        aws: BTreeMap<String,MetricDirectiveObj>,
-                        #[serde(rename = "SandboxId")]
-                        sandbox_id: usize,
-                        #[serde(flatten, with = "as_emf_metrics")]
-                        metrics: Vec<EMFMetrics>,
-                    }
-                    let mut final_emf = EmfStruct{
-                        aws: BTreeMap::new(),
-                        sandbox_id: 1234,
-                        metrics: Vec::new(),
-                    };
-                    final_emf.aws.insert("_aws".to_string(),
-                            MetricDirectiveObj{
-                            timestamp: 0,
-                            cloud_watch_metrics: vec![MetricDirective{
-                            namespace: "TestNs".to_string(),
-                            dimensions: Vec::new(),
-                            metrics: Vec::new(),
-                            }]
-                        }
-                    );
-                    fn get_unit(key: &str) -> String{
-                        let mut unit = "Count".to_string();
-                        if key.to_lowercase().ends_with("_bytes") || key.to_lowercase().ends_with("_bytes_count"){
-                            unit = "Bytes".to_string();
-                        }else if key.to_lowercase().ends_with("_ms"){
-                            unit = "Milliseconds".to_string();
-                        }else if key.to_lowercase().ends_with("_us") {
-                            unit = "Microseconds".to_string()
-                        }
-                        unit
-                    }
-                    let emf = serde_json::from_str::<Emf>(msg.as_str()).unwrap();
-                    // Timestamp = emf.utc_timestamp_ms;
-                    let mobj = final_emf.aws.get_mut("_aws").unwrap();
-                    mobj.timestamp = emf.utc_timestamp_ms;
-                    mobj.cloud_watch_metrics[0].dimensions.push(vec!["Sandbox".to_string()]);
-                    for (key,value) in emf.innerm.iter(){
-                        for (k,v) in value.iter(){
-                            let emfmetrics = EMFMetrics{
-                                inner: BTreeMap::from([(format!("{}.{}", key, k),*v)])
-                            };
-                            final_emf.metrics.push(emfmetrics);
-                            mobj.cloud_watch_metrics[0].metrics.push(
-                                Metric{
-                                    name: format!("{}.{}", key, k),
-                                    unit: get_unit(k),
-                                }
-                            );
-                        }
-                    }
-                    println!("{}",serde_json::to_string_pretty(&final_emf).unwrap());
+                    self.print_emf(msg.clone());
                     if let Ok(mut guard) = lock.lock() {
                         // No need to explicitly call flush because the underlying LineWriter
                         // flushes automatically whenever a newline is
