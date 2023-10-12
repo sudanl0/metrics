@@ -1,62 +1,180 @@
-use crate::metrics::{SharedIncMetric, IncMetric, PerDeviceMetricsHelper};
-use serde::{Serialize, Serializer, ser::SerializeMap};
+// Copyright 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! Defines the metrics system for Network devices.
+//!
+//! # Metrics format
+//! The metrics are flushed in JSON when requested by vmm::logger::metrics::METRICS.write().
+//!
+//! ## JSON example with metrics:
+//! ```json
+//! {
+//!  "net": {
+//!     "activate_fails": "SharedIncMetric",
+//!     "cfg_fails": "SharedIncMetric",
+//!     "mac_address_updates": "SharedIncMetric",
+//!     "no_rx_avail_buffer": "SharedIncMetric",
+//!     "no_tx_avail_buffer": "SharedIncMetric",
+//!     ...
+//!  }
+//!  "net0": {
+//!     "activate_fails": "SharedIncMetric",
+//!     "cfg_fails": "SharedIncMetric",
+//!     "mac_address_updates": "SharedIncMetric",
+//!     "no_rx_avail_buffer": "SharedIncMetric",
+//!     "no_tx_avail_buffer": "SharedIncMetric",
+//!     ...
+//!  }
+//!  "net1": {
+//!     "activate_fails": "SharedIncMetric",
+//!     "cfg_fails": "SharedIncMetric",
+//!     "mac_address_updates": "SharedIncMetric",
+//!     "no_rx_avail_buffer": "SharedIncMetric",
+//!     "no_tx_avail_buffer": "SharedIncMetric",
+//!     ...
+//!  }
+//!  ...
+//!  "netN": {
+//!     "activate_fails": "SharedIncMetric",
+//!     "cfg_fails": "SharedIncMetric",
+//!     "mac_address_updates": "SharedIncMetric",
+//!     "no_rx_avail_buffer": "SharedIncMetric",
+//!     "no_tx_avail_buffer": "SharedIncMetric",
+//!     ...
+//!  }
+//! }
+//! ```
+//! Each `net` field in the example above is a serializable `NetDeviceMetrics` structure
+//! collecting metrics such as `activate_fails`, `cfg_fails`, etc. for the network device.
+//! `net0`, `net1` and `netN` in the above example represent metrics 0th, 1st and 'N'th
+//! network device respectively and `net` is the aggregate of all the per device metrics.
+//!
+//! # Limitations
+//! Network device currently do not have `vmm::logger::metrics::StoreMetrics` so aggregate
+//! doesn't consider them.
+//!
+//! # Design
+//! The main design goals of this system are:
+//! * To improve network device metrics by logging them at per device granularity.
+//! * Continue to provide aggregate net metrics to maintain backward compatibility.
+//! * Move NetDeviceMetrics out of from logger and decouple it.
+//! * Use lockless operations, preferably ones that don't require anything other than simple
+//!   reads/writes being atomic.
+//! * Rely on `serde` to provide the actual serialization for writing the metrics.
+//! * Since all metrics start at 0, we implement the `Default` trait via derive for all of them, to
+//!   avoid having to initialize everything by hand.
+//!
+//! The system implements 1 types of metrics:
+//! * Shared Incremental Metrics (SharedIncMetrics) - dedicated for the metrics which need a counter
+//! (i.e the number of times an API request failed). These metrics are reset upon flush.
+//! We use NET_DEV_METRICS_PVT instead of adding an entry of NetDeviceMetrics
+//! in Net so that metrics are accessible to be flushed even from signal handlers.
+
+use crate::metrics::{SharedIncMetric, IncMetric};
+use serde::ser::SerializeMap;
+use serde::{Serialize, Serializer};
+use std::sync::RwLock;
+use lazy_static::lazy_static;   // we already have this dependency anyway
 
 ///////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////// METRICS ///////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-#[derive(Default)]
-struct NetDeviceMetricsBuilder {
-    metrics: Vec<NetDeviceMetrics>,
+#[derive(Copy, Clone, Debug, Default)]
+pub struct NetDeviceMetricsIndex(usize);
+
+impl NetDeviceMetricsIndex {
+    pub fn get(&self) -> &RwLock<NetDeviceMetrics> {
+        // SAFETY: This is called by individual Net devices
+        // on self (i.e. self.metrics.get()) so no race condition
+        // and it is safe.
+        // unsafe { &NET_DEV_METRICS_PVT.metrics[self.0] }
+        // &NET_DEV_METRICS_PVT.metrics[self.0]
+        unsafe { &NET_DEV_METRICS_PVT.metrics[self.0] }
+    }
 }
-impl NetDeviceMetricsBuilder {
-    fn new() -> &'static NetDeviceMetrics {
-        unsafe{
-            NET_DEV_METRICS_PVT.metrics.push(NetDeviceMetrics::new());
-            &NET_DEV_METRICS_PVT.metrics[NET_DEV_METRICS_PVT.metrics.len()-1]
+
+/// provides instance for net metrics
+#[derive(Debug)]
+pub struct NetDeviceMetricsPool {
+    /// used to access per net device metrics
+    metrics: Vec<RwLock<NetDeviceMetrics>>,
+}
+
+impl NetDeviceMetricsPool {
+    /// default construction
+    pub fn get() -> NetDeviceMetricsIndex {
+        // SAFETY: This is only called during creation of a Net device
+        // and since each device is created sequentially so there is no
+        // case of race condition.
+        unsafe {
+            // let mut locked_metrics = NET_DEV_METRICS_PVT.metrics.write().unwrap();
+            NET_DEV_METRICS_PVT.metrics.push(RwLock::new(NetDeviceMetrics::new()));
+            NetDeviceMetricsIndex(NET_DEV_METRICS_PVT.metrics.len() - 1)
+
+
+            // NET_DEV_METRICS_PVT.metrics.push(OnceLock::new());
+            // NET_DEV_METRICS_PVT.metrics[metrics_indx].get_or_init(|| RwLock::new(NetDeviceMetrics::default()));
+            // // NET_DEV_METRICS_PVT.metrics.push(RwLock::new());
         }
     }
 }
 
-/// Contains Network-related metrics per device.
-static mut NET_DEV_METRICS_PVT: NetDeviceMetricsBuilder = NetDeviceMetricsBuilder {
+// /// Contains Network-related metrics per device.
+// static NET_DEV_METRICS_PVT: NetDeviceMetricsPool = NetDeviceMetricsPool {
+//     metrics: Vec::new(),
+// };
+static mut NET_DEV_METRICS_PVT: NetDeviceMetricsPool = NetDeviceMetricsPool {
     metrics: Vec::new(),
 };
 
-pub struct NetDeviceMetricsHelper {}
-impl PerDeviceMetricsHelper for NetDeviceMetricsHelper {
-    fn serialize_metrics<S:Serializer>(serializer: S)
-    -> Result<S::Ok, S::Error>{
-        unsafe{
-            // +1 to accomodate aggregate net metrics
-            let mut seq =
-            serializer.serialize_map(
-                Some(1+NET_DEV_METRICS_PVT.metrics.len()))?;
+// lazy_static! {
+//     /// Contains Network-related metrics per device.
+//     static ref NET_DEV_METRICS_PVT: NetDeviceMetricsPool = NetDeviceMetricsPool {
+//         metrics: Vec::new(),
+//     };
+//     // RwLock<Vec<NetDeviceMetrics>> = RwLock::new(Vec::new());
+// }
 
-            let net_aggregated: NetDeviceMetrics = NET_DEV_METRICS_PVT.metrics
-            .iter()
-            .fold(NetDeviceMetrics::default(),
-                 |mut net_agg, net|{ net_agg.aggregate(net); net_agg});
+pub fn flush_metrics<S: Serializer>(serializer: S) -> Result<S::Ok, S::Error> {
+    // SAFETY: This is called from vmm::logger::metrics::METRICS.write which
+    // has a lock and takes care of race condition.
+    unsafe {
+        // +1 to accomodate aggregate net metrics
+        // let locked_metrics = NET_DEV_METRICS_PVT.metrics.read().unwrap();
+        // let mut seq = serializer.serialize_map(Some(1 + locked_metrics.len()))?;
+        let metrics_len = NET_DEV_METRICS_PVT.metrics.len();
+        let mut seq = serializer.serialize_map(Some(1 + metrics_len))?;
 
-            seq.serialize_entry("net", &net_aggregated)?;
-    
-            for i in 0..NET_DEV_METRICS_PVT.metrics.len() {
-                let devn = format!("net{}", i);
-                seq.serialize_entry(&devn, &NET_DEV_METRICS_PVT.metrics[i])?;
-            }
-            seq.end()
+        let net_aggregated: NetDeviceMetrics = NET_DEV_METRICS_PVT.metrics.iter().fold(
+            NetDeviceMetrics::default(),
+            |mut net_agg, net| {
+                net_agg.aggregate(&net.read().unwrap());
+                net_agg
+            },
+        );
+        // println!("{:#?}", net_aggregated);
+
+        seq.serialize_entry("net", &net_aggregated)?;
+        
+        for (i, metrics) in NET_DEV_METRICS_PVT.metrics.iter().enumerate() {
+            let devn = format!("net{}", i);
+            seq.serialize_entry(&devn, &*(metrics.read().unwrap()))?;
+            // seq.serialize_entry(&devn, &ser_metrics)?;
         }
+        seq.end()
     }
 }
 
 /// Network-related metrics.
+// #[derive(Debug, Default)]
 #[derive(Debug, Default, Serialize)]
 pub struct NetDeviceMetrics {
     /// Number of times when activate failed on a network device.
     pub activate_fails: SharedIncMetric,
     /// Number of times when interacting with the space config of a network device failed.
     pub cfg_fails: SharedIncMetric,
-    //// Number of times the mac address was updated through the config space.
+    /// Number of times the mac address was updated through the config space.
     pub mac_address_updates: SharedIncMetric,
     /// No available buffer for the net device rx queue.
     pub no_rx_avail_buffer: SharedIncMetric,
@@ -147,34 +265,50 @@ impl NetDeviceMetrics {
     /// So to have the aggregate serialized in same way we need to
     /// fetch the diff of current vs old metrics and add it to the
     /// aggregate.
-    fn aggregate(&mut self, other: &super::netdevice::NetDeviceMetrics) {
+    pub fn aggregate(&mut self, other: &Self) {
         self.activate_fails.add(other.activate_fails.fetch_diff());
         self.cfg_fails.add(other.cfg_fails.fetch_diff());
-        self.mac_address_updates.add(other.mac_address_updates.fetch_diff());
-        self.no_rx_avail_buffer.add(other.no_rx_avail_buffer.fetch_diff());
-        self.no_tx_avail_buffer.add(other.no_tx_avail_buffer.fetch_diff());
+        self.mac_address_updates
+            .add(other.mac_address_updates.fetch_diff());
+        self.no_rx_avail_buffer
+            .add(other.no_rx_avail_buffer.fetch_diff());
+        self.no_tx_avail_buffer
+            .add(other.no_tx_avail_buffer.fetch_diff());
         self.event_fails.add(other.event_fails.fetch_diff());
-        self.rx_queue_event_count.add(other.rx_queue_event_count.fetch_diff());
-        self.rx_event_rate_limiter_count.add(other.rx_event_rate_limiter_count.fetch_diff());
-        self.rx_partial_writes.add(other.rx_partial_writes.fetch_diff());
-        self.rx_rate_limiter_throttled.add(other.rx_rate_limiter_throttled.fetch_diff());
-        self.rx_tap_event_count.add(other.rx_tap_event_count.fetch_diff());
+        self.rx_queue_event_count
+            .add(other.rx_queue_event_count.fetch_diff());
+        self.rx_event_rate_limiter_count
+            .add(other.rx_event_rate_limiter_count.fetch_diff());
+        self.rx_partial_writes
+            .add(other.rx_partial_writes.fetch_diff());
+        self.rx_rate_limiter_throttled
+            .add(other.rx_rate_limiter_throttled.fetch_diff());
+        self.rx_tap_event_count
+            .add(other.rx_tap_event_count.fetch_diff());
         self.rx_bytes_count.add(other.rx_bytes_count.fetch_diff());
-        self.rx_packets_count.add(other.rx_packets_count.fetch_diff());
+        self.rx_packets_count
+            .add(other.rx_packets_count.fetch_diff());
         self.rx_fails.add(other.rx_fails.fetch_diff());
         self.rx_count.add(other.rx_count.fetch_diff());
         self.tap_read_fails.add(other.tap_read_fails.fetch_diff());
         self.tap_write_fails.add(other.tap_write_fails.fetch_diff());
         self.tx_bytes_count.add(other.tx_bytes_count.fetch_diff());
-        self.tx_malformed_frames.add(other.tx_malformed_frames.fetch_diff());
+        self.tx_malformed_frames
+            .add(other.tx_malformed_frames.fetch_diff());
         self.tx_fails.add(other.tx_fails.fetch_diff());
         self.tx_count.add(other.tx_count.fetch_diff());
-        self.tx_packets_count.add(other.tx_packets_count.fetch_diff());
-        self.tx_partial_reads.add(other.tx_partial_reads.fetch_diff());
-        self.tx_queue_event_count.add(other.tx_queue_event_count.fetch_diff());
-        self.tx_rate_limiter_event_count.add(other.tx_rate_limiter_event_count.fetch_diff());
-        self.tx_rate_limiter_throttled.add(other.tx_rate_limiter_throttled.fetch_diff());
-        self.tx_spoofed_mac_count.add(other.tx_spoofed_mac_count.fetch_diff());
+        self.tx_packets_count
+            .add(other.tx_packets_count.fetch_diff());
+        self.tx_partial_reads
+            .add(other.tx_partial_reads.fetch_diff());
+        self.tx_queue_event_count
+            .add(other.tx_queue_event_count.fetch_diff());
+        self.tx_rate_limiter_event_count
+            .add(other.tx_rate_limiter_event_count.fetch_diff());
+        self.tx_rate_limiter_throttled
+            .add(other.tx_rate_limiter_throttled.fetch_diff());
+        self.tx_spoofed_mac_count
+            .add(other.tx_spoofed_mac_count.fetch_diff());
     }
 }
 
@@ -182,7 +316,7 @@ impl NetDeviceMetrics {
 pub struct Net{
     #[allow(dead_code)]
     pub(crate) id: String,
-    pub(crate) metrics: &'static NetDeviceMetrics,
+    pub(crate) metrics: NetDeviceMetricsIndex,
 }
 
 #[allow(dead_code)]
@@ -190,7 +324,30 @@ impl Net{
     pub fn new(id: String) -> Net{
         Net{
             id: id,
-            metrics: NetDeviceMetricsBuilder::new()
+            metrics: NetDeviceMetricsPool::get()
+        }
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    #[test]
+    fn test_net_dev_metrics() {
+        // we can have max 19 net devices
+        const MAX_NET_DEVICES: usize = 19;
+        let mut net_dev_metrics: [NetDeviceMetricsIndex; MAX_NET_DEVICES] =
+            [NetDeviceMetricsIndex::default(); MAX_NET_DEVICES];
+        for metric in net_dev_metrics.iter_mut().take(MAX_NET_DEVICES) {
+            *metric = NetDeviceMetricsPool::get();
+            metric.get().write().unwrap().activate_fails.inc();
+        }
+        // SAFETY: something
+        unsafe {
+            assert!(NET_DEV_METRICS_PVT.metrics.len() >= MAX_NET_DEVICES);
+        }
+        for metric in net_dev_metrics.iter_mut().take(MAX_NET_DEVICES) {
+            assert_eq!(metric.get().write().unwrap().activate_fails.count(), 1);
         }
     }
 }

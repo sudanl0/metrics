@@ -5,10 +5,10 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::vec;
-use crate::netdevice::NetDeviceMetricsHelper;
 use std::collections::BTreeMap;
 
 use serde::{Serialize, Serializer, Deserialize, ser::SerializeMap};
+use crate::netdevice::flush_metrics;
 
 pub type FcLineWriter = std::io::LineWriter<std::fs::File>;
 
@@ -359,7 +359,7 @@ impl Serialize for NetDeviceMetricsDummmy{
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where
             S: Serializer {
-                NetDeviceMetricsHelper::serialize_metrics(serializer)
+                flush_metrics(serializer)
     }
 }
 
