@@ -9,9 +9,10 @@ use crate::metrics::IncMetric;
 
 fn test_net_metrics(m: &Metrics<FirecrackerMetrics, LineWriter<File>>){
 // /*
-    let net0 = Net::new(String::from("net0"));
-    let net1 = Net::new(String::from("net1"));
+    let net0 = Net::new(String::from("eth00"));
+    let net1 = Net::new(String::from("eth11"));
     let t0 = SystemTime::now();
+    net0.metrics.get().write().unwrap().activate_fails.inc();
     net0.metrics.get().write().unwrap().cfg_fails.add(10);
     net0.metrics.get().write().unwrap().mac_address_updates.add(10);
     net0.metrics.get().write().unwrap().no_rx_avail_buffer.inc();

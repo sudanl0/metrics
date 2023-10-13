@@ -185,7 +185,7 @@ impl<T: Serialize + Debug, M: Write + Send + Debug> Metrics<T, M> {
         if let Some(lock) = self.metrics_buf.get() {
             match serde_json::to_string_pretty(&self.app_metrics) {
                 Ok(msg) => {
-                    self.print_emf(msg.clone());
+                    // self.print_emf(msg.clone());
                     if let Ok(mut guard) = lock.lock() {
                         // No need to explicitly call flush because the underlying LineWriter
                         // flushes automatically whenever a newline is
