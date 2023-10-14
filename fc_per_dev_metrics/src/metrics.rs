@@ -59,6 +59,7 @@ impl<T: Serialize + Debug, M: Write + Send + Debug> Metrics<T, M> {
             .map_err(|_| MetricsError::AlreadyInitialized)
     }
 
+    #[allow(dead_code)]
     pub fn print_emf(&self, fcmetrics: String) {
         #[derive(Debug, Serialize,Deserialize)]
         struct Emf{

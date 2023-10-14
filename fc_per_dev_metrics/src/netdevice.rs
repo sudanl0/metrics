@@ -75,112 +75,59 @@ use serde::ser::SerializeMap;
 use serde::{Serialize, Serializer};
 use std::collections::BTreeMap;
 use std::sync::RwLock;
+use std::sync::RwLockReadGuard;
 
 ///////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////// METRICS ///////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
+pub fn get_net_metrics() -> RwLockReadGuard<'static, NetDeviceMetricsAlloc, > {
+    NET_DEV_METRICS_PVT.read().unwrap()
+}
+
 #[derive(Debug, Serialize)]
 pub struct NetDeviceMetricsIndex(String);
-
-impl NetDeviceMetricsIndex {
-    pub fn get(&self) -> &RwLock<NetDeviceMetrics> {
-        // SAFETY: This is called by individual Net devices
-        // on self (i.e. self.metrics.get()) so no race condition
-        // and it is safe.
-        // unsafe { &NET_DEV_METRICS_PVT.metrics[self.0] }
-        // &NET_DEV_METRICS_PVT.metrics[self.0]
-        unsafe {
-            NET_DEV_METRICS_PVT.metrics.get(&self.0).unwrap()
-
-            // NET_DEV_METRICS_PVT.metrics.get(&self.0).unwrap_or_else(|| {
-            //     println!("=====Failed to get net device metrics for -{}-.", self.0);
-            //     NetDeviceMetricsAlloc::alloc(self.0.clone());
-            //     NET_DEV_METRICS_PVT.metrics.get(&self.0).unwrap()
-            // })
-
-            // NET_DEV_METRICS_PVT.metrics.get(&self.0).unwrap_or_else(|| {
-            //     println!("=====Failed to get net device metrics for -{}-.", self.0);
-            //     NET_DEV_METRICS_PVT.metrics.insert(self.0.clone(), RwLock::new(NetDeviceMetrics::new()));
-            //     NET_DEV_METRICS_PVT.metrics.get(&self.0).unwrap()
-            // })
-        }
-    }
-}
 
 /// provides instance for net metrics
 #[derive(Debug)]
 pub struct NetDeviceMetricsAlloc {
-    /// used to access per net device metrics
-    metrics: BTreeMap<String, RwLock<NetDeviceMetrics>>,
+    // used to access per net device metrics
+    pub metrics: BTreeMap<String, NetDeviceMetrics>,
 }
 
 impl NetDeviceMetricsAlloc {
     /// default construction
     pub fn alloc(iface_id: String) -> NetDeviceMetricsIndex {
-        // SAFETY: This is only called during creation of a Net device
-        // and since each device is created sequentially so there is no
-        // case of race condition.
-        unsafe {
-            // let mut locked_metrics = NET_DEV_METRICS_PVT.metrics.write().unwrap();
-            NET_DEV_METRICS_PVT.metrics.insert(iface_id.clone(), RwLock::new(NetDeviceMetrics::new()));
+        NET_DEV_METRICS_PVT.write().unwrap().metrics.insert(iface_id.clone(), NetDeviceMetrics::new());
             NetDeviceMetricsIndex(iface_id)
-            // NET_DEV_METRICS_PVT.metrics.push(RwLock::new(NetDeviceMetrics::new()));
-            // NetDeviceMetricsIndex(NET_DEV_METRICS_PVT.metrics.len() - 1)
-
-
-
-            // NET_DEV_METRICS_PVT.metrics.push(OnceLock::new());
-            // NET_DEV_METRICS_PVT.metrics[metrics_indx].get_or_init(|| RwLock::new(NetDeviceMetrics::default()));
-            // // NET_DEV_METRICS_PVT.metrics.push(RwLock::new());
-        }
     }
 }
 
 // /// Contains Network-related metrics per device.
-// static NET_DEV_METRICS_PVT: NetDeviceMetricsAlloc = NetDeviceMetricsAlloc {
-//     metrics: Vec::new(),
-// };
-static mut NET_DEV_METRICS_PVT: NetDeviceMetricsAlloc = NetDeviceMetricsAlloc {
-    metrics: BTreeMap::new(),
-};
-
-// lazy_static! {
-//     /// Contains Network-related metrics per device.
-//     static ref NET_DEV_METRICS_PVT: NetDeviceMetricsAlloc = NetDeviceMetricsAlloc {
-//         metrics: Vec::new(),
-//     };
-//     // RwLock<Vec<NetDeviceMetrics>> = RwLock::new(Vec::new());
-// }
+pub static NET_DEV_METRICS_PVT: RwLock<NetDeviceMetricsAlloc> = RwLock::new(NetDeviceMetricsAlloc{metrics: BTreeMap::new()});
 
 pub fn flush_metrics<S: Serializer>(serializer: S) -> Result<S::Ok, S::Error> {
-    // SAFETY: This is called from vmm::logger::metrics::METRICS.write which
-    // has a lock and takes care of race condition.
-    unsafe {
-        // +1 to accomodate aggregate net metrics
-        // let locked_metrics = NET_DEV_METRICS_PVT.metrics.read().unwrap();
-        // let mut seq = serializer.serialize_map(Some(1 + locked_metrics.len()))?;
-        let metrics_len = NET_DEV_METRICS_PVT.metrics.len();
-        let mut seq = serializer.serialize_map(Some(1 + metrics_len))?;
+    // +1 to accomodate aggregate net metrics
+    // let locked_metrics = NET_DEV_METRICS_PVT.metrics.read().unwrap();
+    // let mut seq = serializer.serialize_map(Some(1 + locked_metrics.len()))?;
+    let metrics_len = NET_DEV_METRICS_PVT.read().unwrap().metrics.len();
+    let mut seq = serializer.serialize_map(Some(1 + metrics_len))?;
 
-        let net_aggregated: NetDeviceMetrics = NET_DEV_METRICS_PVT.metrics.iter().fold(
-            NetDeviceMetrics::default(),
-            |mut net_agg, net| {
-                net_agg.aggregate(&net.1.read().unwrap());
-                net_agg
-            },
-        );
-        // println!("{:#?}", net_aggregated);
+    let net_aggregated: NetDeviceMetrics = NET_DEV_METRICS_PVT.read().unwrap().metrics.iter().fold(
+        NetDeviceMetrics::default(),
+        |mut net_agg, net| {
+            net_agg.aggregate(&net.1);
+            net_agg
+        },
+    );
 
-        seq.serialize_entry("net", &net_aggregated)?;
+    seq.serialize_entry("net", &net_aggregated)?;
 
-        for metrics in NET_DEV_METRICS_PVT.metrics.iter() {
-            let devn = format!("net_{}", metrics.0);
-            seq.serialize_entry(&devn, &*(metrics.1.read().unwrap()))?;
-            // seq.serialize_entry(&devn, &ser_metrics)?;
-        }
-        seq.end()
+    for metrics in NET_DEV_METRICS_PVT.read().unwrap().metrics.iter() {
+        let devn = format!("net_{}", metrics.0);
+        seq.serialize_entry(&devn, &metrics.1)?;
     }
+    seq.end()
 }
 
 /// Network-related metrics.
@@ -349,33 +296,27 @@ impl Net{
 #[cfg(test)]
 pub mod tests {
     use super::*;
+
     #[test]
     fn test_net_dev_metrics() {
         // we can have max 19 net devices
         const MAX_NET_DEVICES: usize = 19;
         let mut net_dev_metrics: Vec<NetDeviceMetricsIndex> = Vec::with_capacity(MAX_NET_DEVICES);
-        // SAFETY: we are just checking len which won't change at this point
+
         for i in 0..MAX_NET_DEVICES {
-            let devn: String = format!("meth{i:#?}");
+            let devn: String = format!("tap{i:#?}");
             net_dev_metrics.push(NetDeviceMetricsAlloc::alloc(devn.clone()));
-            net_dev_metrics[i].get().write().unwrap().activate_fails.inc();
-            net_dev_metrics[i].get().write().unwrap().rx_bytes_count.add(10);
-            net_dev_metrics[i].get().write().unwrap().tx_bytes_count.add(5);
-            // println!("{:#?}", net_dev_metrics[i].get().write().unwrap().activate_fails.count());
+            get_net_metrics().metrics.get(&devn).unwrap().activate_fails.inc();
+            get_net_metrics().metrics.get(&devn).unwrap().rx_bytes_count.add(10);
+            get_net_metrics().metrics.get(&devn).unwrap().tx_bytes_count.add(5);
         }
-        unsafe {
-            assert!(NET_DEV_METRICS_PVT.metrics.len() >= MAX_NET_DEVICES, "{} >= {} failed", NET_DEV_METRICS_PVT.metrics.len(), MAX_NET_DEVICES);
-            for metric in net_dev_metrics.iter_mut() {
-                assert_eq!(metric.get().read().unwrap().activate_fails.count(), 1);
-                // println!("{:#?}", serde_json::to_string_pretty(&*metric.get().write().unwrap()).unwrap());
-            }
+        assert!(
+            get_net_metrics().metrics.len() >= MAX_NET_DEVICES,
+            "{} >= {} failed",
+            get_net_metrics().metrics.len(), MAX_NET_DEVICES);
+        for i in 0..MAX_NET_DEVICES {
+            let devn: String = format!("tap{i:#?}");
+            assert_eq!(get_net_metrics().metrics.get(&devn).unwrap().activate_fails.count(), 1);
         }
-    }
-    // #[test]
-    fn test_net_device_metrics_index() {
-        // let devn: String = String::from("eth_0");
-        // let net_dev_metrics = NetDeviceMetricsIndex::default();
-        let net_dev_metrics = NetDeviceMetricsAlloc::alloc(String::from("eth_1"));
-        net_dev_metrics.get().read().unwrap().activate_fails.inc();
     }
 }
