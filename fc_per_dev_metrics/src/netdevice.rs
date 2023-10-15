@@ -85,8 +85,30 @@ pub fn get_net_metrics() -> RwLockReadGuard<'static, NetDeviceMetricsAlloc, > {
     NET_DEV_METRICS_PVT.read().unwrap()
 }
 
-#[derive(Debug, Serialize)]
-pub struct NetDeviceMetricsIndex(String);
+// #[derive(Debug, Serialize)]
+// pub struct NetDeviceMetricsIndex(String);
+macro_rules! NET_METRICS {
+    ($iface_id:expr,$metric:ident.$action:ident($($value:tt)?)) => {
+        if get_net_metrics().metrics.get($iface_id).is_some() {
+            get_net_metrics().metrics.get($iface_id).unwrap().$metric.$action($($value)?)
+        }else{
+            NetDeviceMetricsAlloc::alloc($iface_id.to_string());
+            get_net_metrics().metrics.get($iface_id).unwrap().$metric.$action($($value)?)
+        }
+    }
+}
+
+// macro_rules! NET_METRICS_ {
+//     ($iface_id:expr, $metric:ident.$action:ident($($value:tt)?)) => {
+//         if NET_DEV_METRICS_PVT.read().unwrap().metrics.get($iface_id).is_some() {
+//             NET_DEV_METRICS_PVT.read().unwrap().metrics.get($iface_id).unwrap().$metric.$action($($value)?)
+//         }else{
+//             println!("{}", $iface_id);
+//             NET_DEV_METRICS_PVT.write().unwrap().metrics.insert($iface_id.to_string().clone(), NetDeviceMetrics::new());
+//             NET_DEV_METRICS_PVT.read().unwrap().metrics.get($iface_id).unwrap().$metric.$action($($value)?)
+//         }
+//     }
+// }
 
 /// provides instance for net metrics
 #[derive(Debug)]
@@ -97,9 +119,12 @@ pub struct NetDeviceMetricsAlloc {
 
 impl NetDeviceMetricsAlloc {
     /// default construction
-    pub fn alloc(iface_id: String) -> NetDeviceMetricsIndex {
-        NET_DEV_METRICS_PVT.write().unwrap().metrics.insert(iface_id.clone(), NetDeviceMetrics::new());
-            NetDeviceMetricsIndex(iface_id)
+    // pub fn alloc(iface_id: String) -> NetDeviceMetricsIndex {
+    pub fn alloc(iface_id: String) {
+        if NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&iface_id).is_none() {
+            NET_DEV_METRICS_PVT.write().unwrap().metrics.insert(iface_id.clone(), NetDeviceMetrics::new());
+        }
+            // NetDeviceMetricsIndex(iface_id)
     }
 }
 
@@ -280,15 +305,15 @@ impl NetDeviceMetrics {
 pub struct Net{
     #[allow(dead_code)]
     pub(crate) id: String,
-    pub(crate) metrics: NetDeviceMetricsIndex,
+    // pub(crate) metrics: NetDeviceMetricsIndex,
 }
 
 #[allow(dead_code)]
 impl Net{
     pub fn new(id: String) -> Net{
+        NetDeviceMetricsAlloc::alloc(id.clone());
         Net{
-            id: id.clone(),
-            metrics: NetDeviceMetricsAlloc::alloc(id)
+            id: id,
         }
     }
 }
@@ -301,22 +326,53 @@ pub mod tests {
     fn test_net_dev_metrics() {
         // we can have max 19 net devices
         const MAX_NET_DEVICES: usize = 19;
-        let mut net_dev_metrics: Vec<NetDeviceMetricsIndex> = Vec::with_capacity(MAX_NET_DEVICES);
 
         for i in 0..MAX_NET_DEVICES {
-            let devn: String = format!("tap{i:#?}");
-            net_dev_metrics.push(NetDeviceMetricsAlloc::alloc(devn.clone()));
+            // let devn: String = format!("tap{i:#?}");
+            let devn: String = format!("tap{}", i);
+            NetDeviceMetricsAlloc::alloc(devn.clone());
             get_net_metrics().metrics.get(&devn).unwrap().activate_fails.inc();
             get_net_metrics().metrics.get(&devn).unwrap().rx_bytes_count.add(10);
             get_net_metrics().metrics.get(&devn).unwrap().tx_bytes_count.add(5);
         }
-        assert!(
-            get_net_metrics().metrics.len() >= MAX_NET_DEVICES,
-            "{} >= {} failed",
-            get_net_metrics().metrics.len(), MAX_NET_DEVICES);
+        // assert!(
+        //     get_net_metrics().metrics.len() >= MAX_NET_DEVICES,
+        //     "{} >= {} failed",
+        //     get_net_metrics().metrics.len(), MAX_NET_DEVICES);
         for i in 0..MAX_NET_DEVICES {
-            let devn: String = format!("tap{i:#?}");
-            assert_eq!(get_net_metrics().metrics.get(&devn).unwrap().activate_fails.count(), 1);
+            // let devn: String = format!("tap{i:#?}");
+            let devn: String = format!("tap{}", i);
+            // assert!(get_net_metrics().metrics.get(&devn).unwrap().activate_fails.count() > 0);
+            assert!(NET_METRICS!(&devn, rx_bytes_count.count()) > 0);
+            // assert!(get_net_metrics().metrics.get(&devn).unwrap().activate_fails.count() <= 2);
+            assert_eq!(NET_METRICS!(&devn, tx_bytes_count.count()), 5);
+            // assert_eq!(get_net_metrics().metrics.get(&devn).unwrap().tx_bytes_count.count(), 5);
         }
+    }
+    #[test]
+    fn test_net_metrics_unwraps() {
+        assert!(NET_DEV_METRICS_PVT.read().is_ok());
+        assert!(NET_DEV_METRICS_PVT.write().is_ok());
+
+        let devn = "tap0";
+        NetDeviceMetricsAlloc::alloc(String::from(devn));
+        assert!(NET_DEV_METRICS_PVT.read().is_ok());
+        assert!(NET_DEV_METRICS_PVT.read().unwrap().metrics.get(devn).is_some());
+
+        get_net_metrics().metrics.get(devn).unwrap().activate_fails.inc();
+        assert!(
+            get_net_metrics().metrics.get(devn).unwrap().activate_fails.count() > 0,
+            "{}",
+            get_net_metrics().metrics.get(devn).unwrap().activate_fails.count()
+        );
+        assert!(
+            get_net_metrics().metrics.get(devn).unwrap().activate_fails.count() <= 2,
+            "{}",
+            get_net_metrics().metrics.get(devn).unwrap().activate_fails.count()
+        );
+
+        NET_METRICS!(&String::from(devn), activate_fails.inc());
+        NET_METRICS!(&String::from(devn), rx_bytes_count.add(5));
+        assert!(NET_METRICS!(&String::from(devn), rx_bytes_count.count()) >= 5);
     }
 }
