@@ -74,57 +74,26 @@ use crate::metrics::{SharedIncMetric, IncMetric};
 use serde::ser::SerializeMap;
 use serde::{Serialize, Serializer};
 use std::collections::BTreeMap;
-use std::sync::RwLock;
-use std::sync::RwLockReadGuard;
+use std::sync::{Arc, RwLock};
 
 ///////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////// METRICS ///////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-pub fn get_net_metrics() -> RwLockReadGuard<'static, NetDeviceMetricsAlloc, > {
-    NET_DEV_METRICS_PVT.read().unwrap()
-}
-
-// #[derive(Debug, Serialize)]
-// pub struct NetDeviceMetricsIndex(String);
-macro_rules! NET_METRICS {
-    ($iface_id:expr,$metric:ident.$action:ident($($value:tt)?)) => {
-        if get_net_metrics().metrics.get($iface_id).is_some() {
-            get_net_metrics().metrics.get($iface_id).unwrap().$metric.$action($($value)?)
-        }else{
-            NetDeviceMetricsAlloc::alloc($iface_id.to_string());
-            get_net_metrics().metrics.get($iface_id).unwrap().$metric.$action($($value)?)
-        }
-    }
-}
-
-// macro_rules! NET_METRICS_ {
-//     ($iface_id:expr, $metric:ident.$action:ident($($value:tt)?)) => {
-//         if NET_DEV_METRICS_PVT.read().unwrap().metrics.get($iface_id).is_some() {
-//             NET_DEV_METRICS_PVT.read().unwrap().metrics.get($iface_id).unwrap().$metric.$action($($value)?)
-//         }else{
-//             println!("{}", $iface_id);
-//             NET_DEV_METRICS_PVT.write().unwrap().metrics.insert($iface_id.to_string().clone(), NetDeviceMetrics::new());
-//             NET_DEV_METRICS_PVT.read().unwrap().metrics.get($iface_id).unwrap().$metric.$action($($value)?)
-//         }
-//     }
-// }
-
 /// provides instance for net metrics
 #[derive(Debug)]
 pub struct NetDeviceMetricsAlloc {
     // used to access per net device metrics
-    pub metrics: BTreeMap<String, NetDeviceMetrics>,
+    pub metrics: BTreeMap<String, Arc<NetDeviceMetrics>>,
 }
 
 impl NetDeviceMetricsAlloc {
     /// default construction
-    // pub fn alloc(iface_id: String) -> NetDeviceMetricsIndex {
-    pub fn alloc(iface_id: String) {
+    pub fn alloc(iface_id: String) -> Arc<NetDeviceMetrics> {
         if NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&iface_id).is_none() {
-            NET_DEV_METRICS_PVT.write().unwrap().metrics.insert(iface_id.clone(), NetDeviceMetrics::new());
+            NET_DEV_METRICS_PVT.write().unwrap().metrics.insert(iface_id.clone(), Arc::new(NetDeviceMetrics::default()));
         }
-            // NetDeviceMetricsIndex(iface_id)
+        NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&iface_id).unwrap().clone()
     }
 }
 
@@ -133,25 +102,18 @@ pub static NET_DEV_METRICS_PVT: RwLock<NetDeviceMetricsAlloc> = RwLock::new(NetD
 
 pub fn flush_metrics<S: Serializer>(serializer: S) -> Result<S::Ok, S::Error> {
     // +1 to accomodate aggregate net metrics
-    // let locked_metrics = NET_DEV_METRICS_PVT.metrics.read().unwrap();
-    // let mut seq = serializer.serialize_map(Some(1 + locked_metrics.len()))?;
-    let metrics_len = NET_DEV_METRICS_PVT.read().unwrap().metrics.len();
+    let metrics = NET_DEV_METRICS_PVT.read().unwrap();
+    let metrics_len = metrics.metrics.len();
     let mut seq = serializer.serialize_map(Some(1 + metrics_len))?;
 
-    let net_aggregated: NetDeviceMetrics = NET_DEV_METRICS_PVT.read().unwrap().metrics.iter().fold(
-        NetDeviceMetrics::default(),
-        |mut net_agg, net| {
-            net_agg.aggregate(&net.1);
-            net_agg
-        },
-    );
-
-    seq.serialize_entry("net", &net_aggregated)?;
-
-    for metrics in NET_DEV_METRICS_PVT.read().unwrap().metrics.iter() {
-        let devn = format!("net_{}", metrics.0);
-        seq.serialize_entry(&devn, &metrics.1)?;
+    let mut net_aggregated = NetDeviceMetrics::default();
+    for (name, metrics) in metrics.metrics.iter() {
+        let devn = format!("net_{}", name);
+        let m: &NetDeviceMetrics = metrics;
+        net_aggregated.aggregate(m);
+        seq.serialize_entry(&devn, m)?;
     }
+    seq.serialize_entry("net", &net_aggregated)?;
     seq.end()
 }
 
@@ -216,39 +178,6 @@ pub struct NetDeviceMetrics {
 }
 
 impl NetDeviceMetrics {
-    /// Const default construction.
-    pub const fn new() -> Self {
-        Self {
-            activate_fails: SharedIncMetric::new(),
-            cfg_fails: SharedIncMetric::new(),
-            mac_address_updates: SharedIncMetric::new(),
-            no_rx_avail_buffer: SharedIncMetric::new(),
-            no_tx_avail_buffer: SharedIncMetric::new(),
-            event_fails: SharedIncMetric::new(),
-            rx_queue_event_count: SharedIncMetric::new(),
-            rx_event_rate_limiter_count: SharedIncMetric::new(),
-            rx_partial_writes: SharedIncMetric::new(),
-            rx_rate_limiter_throttled: SharedIncMetric::new(),
-            rx_tap_event_count: SharedIncMetric::new(),
-            rx_bytes_count: SharedIncMetric::new(),
-            rx_packets_count: SharedIncMetric::new(),
-            rx_fails: SharedIncMetric::new(),
-            rx_count: SharedIncMetric::new(),
-            tap_read_fails: SharedIncMetric::new(),
-            tap_write_fails: SharedIncMetric::new(),
-            tx_bytes_count: SharedIncMetric::new(),
-            tx_malformed_frames: SharedIncMetric::new(),
-            tx_fails: SharedIncMetric::new(),
-            tx_count: SharedIncMetric::new(),
-            tx_packets_count: SharedIncMetric::new(),
-            tx_partial_reads: SharedIncMetric::new(),
-            tx_queue_event_count: SharedIncMetric::new(),
-            tx_rate_limiter_event_count: SharedIncMetric::new(),
-            tx_rate_limiter_throttled: SharedIncMetric::new(),
-            tx_spoofed_mac_count: SharedIncMetric::new(),
-        }
-    }
-
     /// Net metrics are SharedIncMetric where the diff of current vs
     /// old is serialized i.e. serialize_u64(current-old).
     /// So to have the aggregate serialized in same way we need to
@@ -305,15 +234,17 @@ impl NetDeviceMetrics {
 pub struct Net{
     #[allow(dead_code)]
     pub(crate) id: String,
-    // pub(crate) metrics: NetDeviceMetricsIndex,
+    pub(crate) metrics: Arc<NetDeviceMetrics>,
 }
 
 #[allow(dead_code)]
 impl Net{
     pub fn new(id: String) -> Net{
-        NetDeviceMetricsAlloc::alloc(id.clone());
+        println!("{id:?}");
+        // println!("{id:?}");
         Net{
-            id: id,
+            id: id.clone(),
+            metrics: NetDeviceMetricsAlloc::alloc(id.clone()),
         }
     }
 }
@@ -328,25 +259,18 @@ pub mod tests {
         const MAX_NET_DEVICES: usize = 19;
 
         for i in 0..MAX_NET_DEVICES {
-            // let devn: String = format!("tap{i:#?}");
             let devn: String = format!("tap{}", i);
             NetDeviceMetricsAlloc::alloc(devn.clone());
-            get_net_metrics().metrics.get(&devn).unwrap().activate_fails.inc();
-            get_net_metrics().metrics.get(&devn).unwrap().rx_bytes_count.add(10);
-            get_net_metrics().metrics.get(&devn).unwrap().tx_bytes_count.add(5);
+            NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&devn).unwrap().activate_fails.inc();
+            NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&devn).unwrap().rx_bytes_count.add(10);
+            NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&devn).unwrap().tx_bytes_count.add(5);
         }
-        // assert!(
-        //     get_net_metrics().metrics.len() >= MAX_NET_DEVICES,
-        //     "{} >= {} failed",
-        //     get_net_metrics().metrics.len(), MAX_NET_DEVICES);
+
         for i in 0..MAX_NET_DEVICES {
-            // let devn: String = format!("tap{i:#?}");
             let devn: String = format!("tap{}", i);
-            // assert!(get_net_metrics().metrics.get(&devn).unwrap().activate_fails.count() > 0);
-            assert!(NET_METRICS!(&devn, rx_bytes_count.count()) > 0);
-            // assert!(get_net_metrics().metrics.get(&devn).unwrap().activate_fails.count() <= 2);
-            assert_eq!(NET_METRICS!(&devn, tx_bytes_count.count()), 5);
-            // assert_eq!(get_net_metrics().metrics.get(&devn).unwrap().tx_bytes_count.count(), 5);
+            assert!(NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&devn).unwrap().activate_fails.count() > 0);
+            assert!(NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&devn).unwrap().rx_bytes_count.count() > 0);
+            assert_eq!(NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&devn).unwrap().tx_bytes_count.count(), 5);
         }
     }
     #[test]
@@ -359,20 +283,20 @@ pub mod tests {
         assert!(NET_DEV_METRICS_PVT.read().is_ok());
         assert!(NET_DEV_METRICS_PVT.read().unwrap().metrics.get(devn).is_some());
 
-        get_net_metrics().metrics.get(devn).unwrap().activate_fails.inc();
+        NET_DEV_METRICS_PVT.read().unwrap().metrics.get(devn).unwrap().activate_fails.inc();
         assert!(
-            get_net_metrics().metrics.get(devn).unwrap().activate_fails.count() > 0,
+            NET_DEV_METRICS_PVT.read().unwrap().metrics.get(devn).unwrap().activate_fails.count() > 0,
             "{}",
-            get_net_metrics().metrics.get(devn).unwrap().activate_fails.count()
+            NET_DEV_METRICS_PVT.read().unwrap().metrics.get(devn).unwrap().activate_fails.count()
         );
         assert!(
-            get_net_metrics().metrics.get(devn).unwrap().activate_fails.count() <= 2,
+            NET_DEV_METRICS_PVT.read().unwrap().metrics.get(devn).unwrap().activate_fails.count() <= 2,
             "{}",
-            get_net_metrics().metrics.get(devn).unwrap().activate_fails.count()
+            NET_DEV_METRICS_PVT.read().unwrap().metrics.get(devn).unwrap().activate_fails.count()
         );
 
-        NET_METRICS!(&String::from(devn), activate_fails.inc());
-        NET_METRICS!(&String::from(devn), rx_bytes_count.add(5));
-        assert!(NET_METRICS!(&String::from(devn), rx_bytes_count.count()) >= 5);
+        NET_DEV_METRICS_PVT.read().unwrap().metrics.get(devn).unwrap().activate_fails.inc();
+        NET_DEV_METRICS_PVT.read().unwrap().metrics.get(devn).unwrap().rx_bytes_count.add(5);
+        assert!(NET_DEV_METRICS_PVT.read().unwrap().metrics.get(devn).unwrap().rx_bytes_count.count() >= 5);
     }
 }
