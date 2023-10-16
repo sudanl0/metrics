@@ -9,7 +9,7 @@
 //! ## JSON example with metrics:
 //! ```json
 //! {
-//!  "net": {
+//!  "net_eth0": {
 //!     "activate_fails": "SharedIncMetric",
 //!     "cfg_fails": "SharedIncMetric",
 //!     "mac_address_updates": "SharedIncMetric",
@@ -17,15 +17,7 @@
 //!     "no_tx_avail_buffer": "SharedIncMetric",
 //!     ...
 //!  }
-//!  "net0": {
-//!     "activate_fails": "SharedIncMetric",
-//!     "cfg_fails": "SharedIncMetric",
-//!     "mac_address_updates": "SharedIncMetric",
-//!     "no_rx_avail_buffer": "SharedIncMetric",
-//!     "no_tx_avail_buffer": "SharedIncMetric",
-//!     ...
-//!  }
-//!  "net1": {
+//!  "net_eth1": {
 //!     "activate_fails": "SharedIncMetric",
 //!     "cfg_fails": "SharedIncMetric",
 //!     "mac_address_updates": "SharedIncMetric",
@@ -34,7 +26,15 @@
 //!     ...
 //!  }
 //!  ...
-//!  "netN": {
+//!  "net_iface_id": {
+//!     "activate_fails": "SharedIncMetric",
+//!     "cfg_fails": "SharedIncMetric",
+//!     "mac_address_updates": "SharedIncMetric",
+//!     "no_rx_avail_buffer": "SharedIncMetric",
+//!     "no_tx_avail_buffer": "SharedIncMetric",
+//!     ...
+//!  }
+//!  "net": {
 //!     "activate_fails": "SharedIncMetric",
 //!     "cfg_fails": "SharedIncMetric",
 //!     "mac_address_updates": "SharedIncMetric",
@@ -46,7 +46,9 @@
 //! ```
 //! Each `net` field in the example above is a serializable `NetDeviceMetrics` structure
 //! collecting metrics such as `activate_fails`, `cfg_fails`, etc. for the network device.
-//! `net0`, `net1` and `netN` in the above example represent metrics 0th, 1st and 'N'th
+//! `net_eth0` represent metrics for the endpoint "/network-interfaces/eth0",
+//! `net_eth1` represent metrics for the endpoint "/network-interfaces/eth1", and
+//! `net_iface_id` represent metrics for the endpoint "/network-interfaces/{iface_id}"
 //! network device respectively and `net` is the aggregate of all the per device metrics.
 //!
 //! # Limitations
@@ -64,51 +66,81 @@
 //! * Since all metrics start at 0, we implement the `Default` trait via derive for all of them, to
 //!   avoid having to initialize everything by hand.
 //!
+//! * Devices could be created in any order i.e. the first device created could either be eth0 or
+//!   eth1 so if we use a vector for NetDeviceMetrics and call 1st device as net0, then net0 could
+//!   sometimes point to eth0 and sometimes to eth1 which doesn't help with analysing the metrics.
+//!   So, use Map instead of Vec to help understand which interface the metrics actually belongs to.
+//! * We use "net_$iface_id" for the metrics name instead of "net_$tap_name" to be consistent with
+//!   the net endpoint "/network-interfaces/{iface_id}".
+//!
 //! The system implements 1 types of metrics:
 //! * Shared Incremental Metrics (SharedIncMetrics) - dedicated for the metrics which need a counter
 //! (i.e the number of times an API request failed). These metrics are reset upon flush.
 //! We use NET_DEV_METRICS_PVT instead of adding an entry of NetDeviceMetrics
 //! in Net so that metrics are accessible to be flushed even from signal handlers.
 
-use crate::metrics::{SharedIncMetric, IncMetric};
-use serde::ser::SerializeMap;
-use serde::{Serialize, Serializer};
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 
-///////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////// METRICS ///////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
+use serde::ser::SerializeMap;
+use serde::{Serialize, Serializer};
 
-/// provides instance for net metrics
+use crate::metrics::{IncMetric, SharedIncMetric};
+
+
+/// map of network interface id and metrics
+/// this should be protected by a lock before accessing.
 #[derive(Debug)]
-pub struct NetDeviceMetricsAlloc {
-    // used to access per net device metrics
+pub struct NetMetricsPerDevice {
+    /// used to access per net device metrics
     pub metrics: BTreeMap<String, Arc<NetDeviceMetrics>>,
 }
 
-impl NetDeviceMetricsAlloc {
-    /// default construction
+impl NetMetricsPerDevice {
+    /// Allocate `NetDeviceMetrics` for net device having
+    /// id `iface_id`. Also, allocate only if it doesn't
+    /// exist to avoid overwriting previously allocated data.
+    /// lock is always initialized so it is safe the unwrap
+    /// the lock without a check.
     pub fn alloc(iface_id: String) -> Arc<NetDeviceMetrics> {
-        if NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&iface_id).is_none() {
-            NET_DEV_METRICS_PVT.write().unwrap().metrics.insert(iface_id.clone(), Arc::new(NetDeviceMetrics::default()));
+        if NET_DEV_METRICS_PVT
+            .read()
+            .unwrap()
+            .metrics
+            .get(&iface_id)
+            .is_none()
+        {
+            NET_DEV_METRICS_PVT
+                .write()
+                .unwrap()
+                .metrics
+                .insert(iface_id.clone(), Arc::new(NetDeviceMetrics::default()));
         }
         NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&iface_id).unwrap().clone()
     }
 }
 
-// /// Contains Network-related metrics per device.
-pub static NET_DEV_METRICS_PVT: RwLock<NetDeviceMetricsAlloc> = RwLock::new(NetDeviceMetricsAlloc{metrics: BTreeMap::new()});
 
+/// Pool of Network-related metrics per device behind a lock to
+/// keep things thread safe. Since the lock is initialized here
+/// it is safe to unwrap it without any check.
+static NET_DEV_METRICS_PVT: RwLock<NetMetricsPerDevice> = RwLock::new(NetMetricsPerDevice {
+    metrics: BTreeMap::new(),
+});
+
+/// This function facilitates aggregation and serialization of
+/// per net device metrics.
 pub fn flush_metrics<S: Serializer>(serializer: S) -> Result<S::Ok, S::Error> {
+    let net_metrics = NET_DEV_METRICS_PVT.read().unwrap();
+    let metrics_len = net_metrics.metrics.len();
     // +1 to accomodate aggregate net metrics
-    let metrics = NET_DEV_METRICS_PVT.read().unwrap();
-    let metrics_len = metrics.metrics.len();
     let mut seq = serializer.serialize_map(Some(1 + metrics_len))?;
 
-    let mut net_aggregated = NetDeviceMetrics::default();
-    for (name, metrics) in metrics.metrics.iter() {
+    let mut net_aggregated: NetDeviceMetrics = NetDeviceMetrics::default();
+
+    for (name, metrics) in net_metrics.metrics.iter() {
         let devn = format!("net_{}", name);
+        // serialization will flush the metrics so aggregate before it.
         let m: &NetDeviceMetrics = metrics;
         net_aggregated.aggregate(m);
         seq.serialize_entry(&devn, m)?;
@@ -118,7 +150,6 @@ pub fn flush_metrics<S: Serializer>(serializer: S) -> Result<S::Ok, S::Error> {
 }
 
 /// Network-related metrics.
-// #[derive(Debug, Default)]
 #[derive(Debug, Default, Serialize)]
 pub struct NetDeviceMetrics {
     /// Number of times when activate failed on a network device.
@@ -244,7 +275,7 @@ impl Net{
         // println!("{id:?}");
         Net{
             id: id.clone(),
-            metrics: NetDeviceMetricsAlloc::alloc(id.clone()),
+            metrics: NetMetricsPerDevice::alloc(id.clone()),
         }
     }
 }
@@ -254,32 +285,38 @@ pub mod tests {
     use super::*;
 
     #[test]
-    fn test_net_dev_metrics() {
-        // we can have max 19 net devices
+    fn test_max_net_dev_metrics() {
+        // Note: this test has nothing to do with
+        // Net structure or IRQs, this is just to allocate
+        // metrics for max number of devices that system can have.
+        // we have 5-23 irq for net devices so max 19 net devices.
         const MAX_NET_DEVICES: usize = 19;
 
         for i in 0..MAX_NET_DEVICES {
-            let devn: String = format!("tap{}", i);
-            NetDeviceMetricsAlloc::alloc(devn.clone());
+            let devn: String = format!("eth{}", i);
+            NetMetricsPerDevice::alloc(devn.clone());
             NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&devn).unwrap().activate_fails.inc();
             NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&devn).unwrap().rx_bytes_count.add(10);
             NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&devn).unwrap().tx_bytes_count.add(5);
         }
 
         for i in 0..MAX_NET_DEVICES {
-            let devn: String = format!("tap{}", i);
-            assert!(NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&devn).unwrap().activate_fails.count() > 0);
-            assert!(NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&devn).unwrap().rx_bytes_count.count() > 0);
+            let devn: String = format!("eth{}", i);
+            assert!(NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&devn).unwrap().activate_fails.count() >= 1);
+            assert!(NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&devn).unwrap().rx_bytes_count.count() >= 10);
             assert_eq!(NET_DEV_METRICS_PVT.read().unwrap().metrics.get(&devn).unwrap().tx_bytes_count.count(), 5);
         }
     }
     #[test]
-    fn test_net_metrics_unwraps() {
+    fn test_signle_net_dev_metrics() {
+        // Use eth0 so that we can check thread safety with the
+        // `test_net_dev_metrics` which also uses the same name.
+        let devn = "eth0";
+
         assert!(NET_DEV_METRICS_PVT.read().is_ok());
         assert!(NET_DEV_METRICS_PVT.write().is_ok());
 
-        let devn = "tap0";
-        NetDeviceMetricsAlloc::alloc(String::from(devn));
+        NetMetricsPerDevice::alloc(String::from(devn));
         assert!(NET_DEV_METRICS_PVT.read().is_ok());
         assert!(NET_DEV_METRICS_PVT.read().unwrap().metrics.get(devn).is_some());
 
@@ -289,6 +326,8 @@ pub mod tests {
             "{}",
             NET_DEV_METRICS_PVT.read().unwrap().metrics.get(devn).unwrap().activate_fails.count()
         );
+        // we expect only 2 tests (this and test_max_net_dev_metrics)
+        // to update activate_fails count for eth0.
         assert!(
             NET_DEV_METRICS_PVT.read().unwrap().metrics.get(devn).unwrap().activate_fails.count() <= 2,
             "{}",
